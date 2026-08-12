@@ -1,0 +1,41 @@
+import { Dashboard } from "@/components/Dashboard";
+import { getPosts } from "@/lib/wordpress";
+import { getRewriteLogs } from "@/lib/supabase";
+import type { RewriteLog, WordPressPostListItem } from "@/types";
+
+export const dynamic = "force-dynamic";
+
+const PER_PAGE = 10;
+
+export default async function DashboardPage() {
+  let initialPosts: WordPressPostListItem[] = [];
+  let initialTotalPages = 1;
+  let initialPostsError: string | null = null;
+
+  try {
+    const result = await getPosts(1, PER_PAGE, "");
+    initialPosts = result.posts;
+    initialTotalPages = Math.max(1, result.totalPages);
+  } catch (error) {
+    initialPostsError = error instanceof Error ? error.message : "記事の取得に失敗しました。";
+  }
+
+  let initialLogs: RewriteLog[] = [];
+  let initialLogsError: string | null = null;
+
+  try {
+    initialLogs = await getRewriteLogs(20);
+  } catch (error) {
+    initialLogsError = error instanceof Error ? error.message : "履歴の取得に失敗しました。";
+  }
+
+  return (
+    <Dashboard
+      initialPosts={initialPosts}
+      initialTotalPages={initialTotalPages}
+      initialPostsError={initialPostsError}
+      initialLogs={initialLogs}
+      initialLogsError={initialLogsError}
+    />
+  );
+}

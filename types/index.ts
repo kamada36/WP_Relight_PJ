@@ -1,0 +1,81 @@
+// WordPress
+
+export type WordPressPostStatus =
+  | "publish"
+  | "draft"
+  | "pending"
+  | "private"
+  | "future";
+
+export interface WordPressPostListItem {
+  id: number;
+  title: string;
+  content: string;
+  modified: string;
+  status: string;
+  link: string;
+}
+
+export interface WordPressPost {
+  id: number;
+  title: string;
+  content: string;
+  status: WordPressPostStatus;
+  modified: string;
+  link: string;
+}
+
+export interface PostsListResponse {
+  success: true;
+  posts: WordPressPostListItem[];
+  total: number;
+  totalPages: number;
+  page: number;
+}
+
+// Supabase rewrite_logs
+
+export type RewriteStatus = "pending" | "success" | "failed";
+
+export interface RewriteLog {
+  id: string;
+  post_id: number;
+  post_title: string;
+  post_url: string | null;
+  status: RewriteStatus;
+  original_content_snippet: string | null;
+  rewritten_content_snippet: string | null;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface RewriteLogInput {
+  post_id: number;
+  post_title: string;
+  post_url?: string | null;
+  status: RewriteStatus;
+  original_content_snippet?: string | null;
+  rewritten_content_snippet?: string | null;
+  error_message?: string | null;
+}
+
+// API
+
+export type PublishStatus = "draft" | "publish";
+
+export interface RewriteRequestBody {
+  postId: number;
+  publishStatus: PublishStatus;
+}
+
+export interface RewriteResponse {
+  success: boolean;
+  postId?: number;
+  updatedUrl?: string;
+  error?: string;
+}
+
+export interface ApiErrorResponse {
+  success: false;
+  error: string;
+}
