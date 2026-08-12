@@ -79,3 +79,13 @@ export interface ApiErrorResponse {
   success: false;
   error: string;
 }
+
+// App settings (Cron interval)
+
+export const CRON_INTERVAL_OPTIONS = [1, 2, 3, 7] as const;
+export type CronIntervalDays = (typeof CRON_INTERVAL_OPTIONS)[number];
+
+export interface AppSettings {
+  cronIntervalDays: number;
+  lastCronRunAt: string | null;
+}

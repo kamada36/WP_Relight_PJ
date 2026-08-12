@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { LogoutButton } from "@/components/LogoutButton";
+import { CronIntervalSettings } from "@/components/CronIntervalSettings";
+import { getAppSettings } from "@/lib/supabase";
+
+export const dynamic = "force-dynamic";
 
 function EnvStatus({ label, isSet }: { label: string; isSet: boolean }) {
   return (
@@ -19,7 +23,19 @@ function EnvStatus({ label, isSet }: { label: string; isSet: boolean }) {
   );
 }
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  let cronIntervalDays = 1;
+  let lastCronRunAt: string | null = null;
+  let cronSettingsError: string | null = null;
+
+  try {
+    const settings = await getAppSettings();
+    cronIntervalDays = settings.cronIntervalDays;
+    lastCronRunAt = settings.lastCronRunAt;
+  } catch (error) {
+    cronSettingsError = error instanceof Error ? error.message : "設定の取得に失敗しました。";
+  }
+
   const envChecks = [
     { label: "WORDPRESS_URL", isSet: Boolean(process.env.WORDPRESS_URL) },
     { label: "WORDPRESS_USER", isSet: Boolean(process.env.WORDPRESS_USER) },
@@ -46,6 +62,21 @@ export default function SettingsPage() {
         </Link>
         <LogoutButton />
       </div>
+
+      {cronSettingsError ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+          自動リライトの間隔設定を取得できませんでした:{cronSettingsError}
+          <br />
+          Supabaseで <code className="rounded bg-red-100 px-1 py-0.5 dark:bg-red-900">sql/init.sql</code>{" "}
+          を再実行して <code className="rounded bg-red-100 px-1 py-0.5 dark:bg-red-900">app_settings</code>{" "}
+          テーブルを作成してください。
+        </div>
+      ) : (
+        <CronIntervalSettings
+          initialIntervalDays={cronIntervalDays}
+          initialLastRunAt={lastCronRunAt}
+        />
+      )}
 
       <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
         <h1 className="mb-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">設定</h1>
