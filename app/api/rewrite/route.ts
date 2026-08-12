@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { performRewrite } from "@/lib/rewrite-service";
 import type { PublishStatus, RewriteRequestBody } from "@/types";
 
+// Gemini + WordPress round-trip can exceed the platform's default function timeout.
+export const maxDuration = 60;
+
 function isPublishStatus(value: unknown): value is PublishStatus {
   return value === "draft" || value === "publish";
 }

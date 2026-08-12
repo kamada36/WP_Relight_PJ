@@ -3,6 +3,9 @@ import { getOldestPost } from "@/lib/wordpress";
 import { performRewrite } from "@/lib/rewrite-service";
 import { verifyCronSecret } from "@/lib/auth";
 
+// Gemini + WordPress round-trip can exceed the platform's default function timeout.
+export const maxDuration = 60;
+
 async function handle(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;

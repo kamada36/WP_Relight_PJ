@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/rewrite-oldest",
+      "schedule": "0 18 * * *"
+    }
+  ]
+}
