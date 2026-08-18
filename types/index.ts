@@ -66,6 +66,7 @@ export type PublishStatus = "draft" | "publish";
 export interface RewriteRequestBody {
   postId: number;
   publishStatus: PublishStatus;
+  instruction?: string;
 }
 
 export interface RewriteResponse {

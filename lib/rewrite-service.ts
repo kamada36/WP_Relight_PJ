@@ -1,5 +1,5 @@
 import { getPost, updatePost } from "@/lib/wordpress";
-import { rewriteArticle, GeminiRateLimitError } from "@/lib/gemini";
+import { rewriteArticle, GeminiRateLimitError, GeminiAuthError } from "@/lib/gemini";
 import { logRewriteResult } from "@/lib/supabase";
 import type { PublishStatus } from "@/types";
 
@@ -25,12 +25,13 @@ export interface RewriteResult {
  */
 export async function performRewrite(
   postId: number,
-  publishStatus: PublishStatus
+  publishStatus: PublishStatus,
+  instruction?: string
 ): Promise<RewriteResult> {
   const post = await getPost(postId);
 
   try {
-    const rewrittenContent = await rewriteArticle(post.title, post.content);
+    const rewrittenContent = await rewriteArticle(post.title, post.content, instruction);
     const updated = await updatePost(postId, {
       content: rewrittenContent,
       status: publishStatus,
@@ -50,9 +51,11 @@ export async function performRewrite(
     const message =
       error instanceof GeminiRateLimitError
         ? "Gemini APIのレート制限に達しました。しばらく待ってから再試行してください。"
-        : error instanceof Error
-          ? error.message
-          : "不明なエラーが発生しました。";
+        : error instanceof GeminiAuthError
+          ? "Gemini APIキーが未設定または無効です。.env.localのGEMINI_API_KEYを確認してください。"
+          : error instanceof Error
+            ? error.message
+            : "不明なエラーが発生しました。";
 
     await logRewriteResult({
       post_id: post.id,

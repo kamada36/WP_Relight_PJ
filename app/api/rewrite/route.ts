@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as Partial<RewriteRequestBody> | null;
   const postId = body?.postId;
   const publishStatus = body?.publishStatus;
+  const instruction = typeof body?.instruction === "string" ? body.instruction : undefined;
 
   if (typeof postId !== "number" || !isPublishStatus(publishStatus)) {
     return NextResponse.json(
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await performRewrite(postId, publishStatus);
+    const result = await performRewrite(postId, publishStatus, instruction);
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "不明なエラーが発生しました。";

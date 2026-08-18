@@ -14,6 +14,8 @@ interface PostsTableProps {
   onPageChange: (page: number) => void;
   rewritingPostId: number | null;
   onRewrite: (postId: number, publishStatus: PublishStatus) => void;
+  instructions: Record<number, string>;
+  onInstructionChange: (postId: number, value: string) => void;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -55,6 +57,8 @@ export function PostsTable({
   onPageChange,
   rewritingPostId,
   onRewrite,
+  instructions,
+  onInstructionChange,
 }: PostsTableProps) {
   return (
     <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
@@ -113,6 +117,13 @@ export function PostsTable({
                 <p className="text-xs text-zinc-500">
                   #{post.id} ・ {formatDate(post.modified)}
                 </p>
+                <textarea
+                  value={instructions[post.id] ?? ""}
+                  onChange={(event) => onInstructionChange(post.id, event.target.value)}
+                  placeholder="この記事だけの指示（任意）例: もっとカジュアルな口調にする"
+                  rows={2}
+                  className="w-full resize-none rounded-lg border border-zinc-300 bg-transparent px-2.5 py-1.5 text-xs outline-none focus:border-zinc-500 dark:border-zinc-700"
+                />
                 <div className="flex flex-col gap-2">
                   <button
                     onClick={() => onRewrite(post.id, "draft")}
@@ -195,23 +206,32 @@ export function PostsTable({
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => onRewrite(post.id, "draft")}
-                          disabled={isRewriting}
-                          className="flex items-center gap-1.5 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
-                        >
-                          {isRewriting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                          リライトして下書き保存
-                        </button>
-                        <button
-                          onClick={() => onRewrite(post.id, "publish")}
-                          disabled={isRewriting}
-                          className="flex items-center gap-1.5 rounded-lg bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-                        >
-                          {isRewriting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                          リライトして即時公開
-                        </button>
+                      <div className="flex min-w-[220px] flex-col gap-2">
+                        <textarea
+                          value={instructions[post.id] ?? ""}
+                          onChange={(event) => onInstructionChange(post.id, event.target.value)}
+                          placeholder="この記事だけの指示（任意）"
+                          rows={2}
+                          className="w-full resize-none rounded-lg border border-zinc-300 bg-transparent px-2.5 py-1.5 text-xs outline-none focus:border-zinc-500 dark:border-zinc-700"
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => onRewrite(post.id, "draft")}
+                            disabled={isRewriting}
+                            className="flex items-center gap-1.5 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                          >
+                            {isRewriting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                            リライトして下書き保存
+                          </button>
+                          <button
+                            onClick={() => onRewrite(post.id, "publish")}
+                            disabled={isRewriting}
+                            className="flex items-center gap-1.5 rounded-lg bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                          >
+                            {isRewriting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                            リライトして即時公開
+                          </button>
+                        </div>
                       </div>
                     </td>
                   </tr>

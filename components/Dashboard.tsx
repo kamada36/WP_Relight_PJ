@@ -37,6 +37,11 @@ export function Dashboard({
 
   const [rewritingPostId, setRewritingPostId] = useState<number | null>(null);
   const [bulkRunning, setBulkRunning] = useState(false);
+  const [instructions, setInstructions] = useState<Record<number, string>>({});
+
+  const handleInstructionChange = useCallback((postId: number, value: string) => {
+    setInstructions((prev) => ({ ...prev, [postId]: value }));
+  }, []);
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -104,10 +109,11 @@ export function Dashboard({
     async (postId: number, publishStatus: PublishStatus) => {
       setRewritingPostId(postId);
       try {
+        const instruction = instructions[postId]?.trim() || undefined;
         const res = await fetch("/api/rewrite", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ postId, publishStatus }),
+          body: JSON.stringify({ postId, publishStatus, instruction }),
         });
         const data = await res.json();
 
@@ -129,7 +135,7 @@ export function Dashboard({
         setRewritingPostId(null);
       }
     },
-    [fetchPosts, fetchLogs, page, search, pushToast]
+    [fetchPosts, fetchLogs, page, search, pushToast, instructions]
   );
 
   const handleBulkShortcut = useCallback(async () => {
@@ -208,6 +214,8 @@ export function Dashboard({
           onPageChange={handlePageChange}
           rewritingPostId={rewritingPostId}
           onRewrite={handleRewrite}
+          instructions={instructions}
+          onInstructionChange={handleInstructionChange}
         />
         <HistoryPanel logs={logs} loading={logsLoading} />
       </div>
