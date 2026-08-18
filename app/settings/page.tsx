@@ -8,10 +8,10 @@ export const dynamic = "force-dynamic";
 
 function EnvStatus({ label, isSet }: { label: string; isSet: boolean }) {
   return (
-    <div className="flex items-center justify-between border-b border-zinc-100 py-2 text-sm last:border-0 dark:border-zinc-900">
-      <span className="text-zinc-600 dark:text-zinc-400">{label}</span>
+    <div className="flex items-center justify-between gap-2 border-b border-zinc-100 py-2 text-sm last:border-0 dark:border-zinc-900">
+      <span className="break-all text-zinc-600 dark:text-zinc-400">{label}</span>
       <span
-        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+        className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
           isSet
             ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
             : "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
@@ -51,7 +51,7 @@ export default async function SettingsPage() {
   ];
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
+    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 p-4 sm:gap-6 sm:p-6">
       <div className="flex items-center justify-between">
         <Link
           href="/"
@@ -78,7 +78,7 @@ export default async function SettingsPage() {
         />
       )}
 
-      <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="rounded-xl border border-zinc-200 bg-white p-4 sm:p-6 dark:border-zinc-800 dark:bg-zinc-950">
         <h1 className="mb-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">設定</h1>
         <p className="mb-4 text-sm text-zinc-500">
           環境変数は{" "}

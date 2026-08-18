@@ -173,7 +173,7 @@ export function Dashboard({
   }, [fetchPosts, fetchLogs, page, search]);
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-6">
+    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 p-4 sm:gap-6 sm:p-6">
       <Header
         onRefresh={handleRefresh}
         refreshing={postsLoading || logsLoading}

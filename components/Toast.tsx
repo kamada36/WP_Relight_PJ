@@ -17,12 +17,12 @@ export function ToastStack({ toasts, onDismiss }: ToastStackProps) {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+    <div className="fixed inset-x-4 bottom-4 z-50 flex flex-col gap-2 sm:inset-x-auto sm:right-4">
       {toasts.map((toast) => (
         <button
           key={toast.id}
           onClick={() => onDismiss(toast.id)}
-          className={`flex max-w-sm items-start gap-2 rounded-lg border px-4 py-3 text-left text-sm shadow-lg ${
+          className={`flex w-full items-start gap-2 rounded-lg border px-4 py-3 text-left text-sm shadow-lg sm:w-auto sm:max-w-sm ${
             toast.type === "success"
               ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200"
               : "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"

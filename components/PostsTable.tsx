@@ -58,7 +58,7 @@ export function PostsTable({
 }: PostsTableProps) {
   return (
     <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="flex items-center gap-2 border-b border-zinc-200 p-4 dark:border-zinc-800">
+      <div className="flex flex-col gap-2 border-b border-zinc-200 p-3 sm:flex-row sm:items-center sm:p-4 dark:border-zinc-800">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
           <input
@@ -79,7 +79,66 @@ export function PostsTable({
         </button>
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Mobile: card list (avoids squeezing a 5-column table into a narrow screen) */}
+      <div className="divide-y divide-zinc-100 sm:hidden dark:divide-zinc-900">
+        {loading ? (
+          <div className="px-4 py-10 text-center text-zinc-500">
+            <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+          </div>
+        ) : posts.length === 0 ? (
+          <div className="px-4 py-10 text-center text-zinc-500">記事が見つかりませんでした。</div>
+        ) : (
+          posts.map((post) => {
+            const isRewriting = rewritingPostId === post.id;
+            return (
+              <div key={post.id} className="flex flex-col gap-2 p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <a
+                    href={post.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-w-0 items-start gap-1 font-medium text-zinc-900 hover:underline dark:text-zinc-50"
+                  >
+                    <span className="break-words">{post.title || "(無題)"}</span>
+                    <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400" />
+                  </a>
+                  <span
+                    className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                      STATUS_STYLES[post.status] ?? STATUS_STYLES.draft
+                    }`}
+                  >
+                    {STATUS_LABELS[post.status] ?? post.status}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-500">
+                  #{post.id} ・ {formatDate(post.modified)}
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => onRewrite(post.id, "draft")}
+                    disabled={isRewriting}
+                    className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-300 px-2.5 py-2 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                  >
+                    {isRewriting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    リライトして下書き保存
+                  </button>
+                  <button
+                    onClick={() => onRewrite(post.id, "publish")}
+                    disabled={isRewriting}
+                    className="flex items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-2.5 py-2 text-xs font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                  >
+                    {isRewriting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    リライトして即時公開
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop / tablet: table */}
+      <div className="hidden overflow-x-auto sm:block">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800">
@@ -163,7 +222,7 @@ export function PostsTable({
         </table>
       </div>
 
-      <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-3 text-sm dark:border-zinc-800">
+      <div className="flex items-center justify-between gap-3 border-t border-zinc-200 px-4 py-3 text-sm dark:border-zinc-800">
         <span className="text-zinc-500">
           {totalPages > 0 ? `${page} / ${totalPages} ページ` : "-"}
         </span>
