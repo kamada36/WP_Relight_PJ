@@ -114,7 +114,7 @@ export async function getPost(id: number): Promise<WordPressPost> {
 
 export async function updatePost(
   id: number,
-  data: { content: string; status?: "draft" | "publish" }
+  data: { content: string; status?: WordPressPostStatus }
 ): Promise<WordPressPost> {
   const res = await wpFetch(`/posts/${id}`, {
     method: "POST",

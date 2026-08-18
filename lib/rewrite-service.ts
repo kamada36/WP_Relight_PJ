@@ -1,6 +1,6 @@
 import { getPost, updatePost } from "@/lib/wordpress";
 import { rewriteArticle, GeminiRateLimitError, GeminiAuthError } from "@/lib/gemini";
-import { logRewriteResult } from "@/lib/supabase";
+import { getAppSettings, logRewriteResult, saveOriginalIfAbsent } from "@/lib/supabase";
 import type { PublishStatus } from "@/types";
 
 const SNIPPET_LENGTH = 300;
@@ -30,8 +30,19 @@ export async function performRewrite(
 ): Promise<RewriteResult> {
   const post = await getPost(postId);
 
+  // Keep the pre-rewrite content around (only on the first rewrite of an
+  // unconfirmed cycle) so the user can revert even after rewriting repeatedly.
+  await saveOriginalIfAbsent(postId, post.content, post.status);
+
   try {
-    const rewrittenContent = await rewriteArticle(post.title, post.content, instruction);
+    let geminiModel: string | undefined;
+    try {
+      geminiModel = (await getAppSettings()).geminiModel;
+    } catch {
+      // Fall back to GEMINI_MODEL_NAME / the built-in default.
+    }
+
+    const rewrittenContent = await rewriteArticle(post.title, post.content, instruction, geminiModel);
     const updated = await updatePost(postId, {
       content: rewrittenContent,
       status: publishStatus,

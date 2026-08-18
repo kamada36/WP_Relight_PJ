@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Loader2, Search } from "lucide-react";
+import { ExternalLink, Loader2, RotateCcw, Search } from "lucide-react";
 import type { PublishStatus, WordPressPostListItem } from "@/types";
 
 interface PostsTableProps {
@@ -12,10 +12,13 @@ interface PostsTableProps {
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
-  rewritingPostId: number | null;
+  busyPostId: number | null;
   onRewrite: (postId: number, publishStatus: PublishStatus) => void;
   instructions: Record<number, string>;
   onInstructionChange: (postId: number, value: string) => void;
+  pendingPostIds: Set<number>;
+  onRevert: (postId: number) => void;
+  onFinalize: (postId: number) => void;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -55,10 +58,13 @@ export function PostsTable({
   page,
   totalPages,
   onPageChange,
-  rewritingPostId,
+  busyPostId,
   onRewrite,
   instructions,
   onInstructionChange,
+  pendingPostIds,
+  onRevert,
+  onFinalize,
 }: PostsTableProps) {
   return (
     <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
@@ -93,7 +99,8 @@ export function PostsTable({
           <div className="px-4 py-10 text-center text-zinc-500">記事が見つかりませんでした。</div>
         ) : (
           posts.map((post) => {
-            const isRewriting = rewritingPostId === post.id;
+            const isBusy = busyPostId === post.id;
+            const isPending = pendingPostIds.has(post.id);
             return (
               <div key={post.id} className="flex flex-col gap-2 p-4">
                 <div className="flex items-start justify-between gap-2">
@@ -117,6 +124,35 @@ export function PostsTable({
                 <p className="text-xs text-zinc-500">
                   #{post.id} ・ {formatDate(post.modified)}
                 </p>
+                {isPending && (
+                  <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 dark:border-amber-900 dark:bg-amber-950">
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                      未確定のリライトがあります。確定するまで元の記事に戻せます。
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => onRevert(post.id)}
+                        disabled={isBusy}
+                        className="flex items-center justify-center gap-1.5 rounded-lg border border-amber-300 px-2.5 py-2 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-60 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-900"
+                      >
+                        {isBusy ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        )}
+                        元に戻す
+                      </button>
+                      <button
+                        onClick={() => onFinalize(post.id)}
+                        disabled={isBusy}
+                        className="flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 px-2.5 py-2 text-xs font-medium text-white transition-colors hover:bg-amber-500 disabled:opacity-60"
+                      >
+                        {isBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        この内容で確定
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <textarea
                   value={instructions[post.id] ?? ""}
                   onChange={(event) => onInstructionChange(post.id, event.target.value)}
@@ -127,18 +163,18 @@ export function PostsTable({
                 <div className="flex flex-col gap-2">
                   <button
                     onClick={() => onRewrite(post.id, "draft")}
-                    disabled={isRewriting}
+                    disabled={isBusy}
                     className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-300 px-2.5 py-2 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
                   >
-                    {isRewriting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    {isBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                     リライトして下書き保存
                   </button>
                   <button
                     onClick={() => onRewrite(post.id, "publish")}
-                    disabled={isRewriting}
+                    disabled={isBusy}
                     className="flex items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-2.5 py-2 text-xs font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
                   >
-                    {isRewriting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    {isBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                     リライトして即時公開
                   </button>
                 </div>
@@ -175,7 +211,8 @@ export function PostsTable({
               </tr>
             ) : (
               posts.map((post) => {
-                const isRewriting = rewritingPostId === post.id;
+                const isBusy = busyPostId === post.id;
+                const isPending = pendingPostIds.has(post.id);
                 return (
                   <tr
                     key={post.id}
@@ -183,15 +220,22 @@ export function PostsTable({
                   >
                     <td className="px-4 py-3 text-zinc-500">{post.id}</td>
                     <td className="max-w-xs px-4 py-3">
-                      <a
-                        href={post.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 font-medium text-zinc-900 hover:underline dark:text-zinc-50"
-                      >
-                        <span className="truncate">{post.title || "(無題)"}</span>
-                        <ExternalLink className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
-                      </a>
+                      <div className="flex flex-col items-start gap-1">
+                        <a
+                          href={post.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex max-w-full items-center gap-1 font-medium text-zinc-900 hover:underline dark:text-zinc-50"
+                        >
+                          <span className="truncate">{post.title || "(無題)"}</span>
+                          <ExternalLink className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+                        </a>
+                        {isPending && (
+                          <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                            未確定
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-zinc-500">
                       {formatDate(post.modified)}
@@ -207,6 +251,30 @@ export function PostsTable({
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex min-w-[220px] flex-col gap-2">
+                        {isPending && (
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              onClick={() => onRevert(post.id)}
+                              disabled={isBusy}
+                              className="flex items-center gap-1.5 rounded-lg border border-amber-300 px-2.5 py-1.5 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-60 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-900"
+                            >
+                              {isBusy ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RotateCcw className="h-3.5 w-3.5" />
+                              )}
+                              元に戻す
+                            </button>
+                            <button
+                              onClick={() => onFinalize(post.id)}
+                              disabled={isBusy}
+                              className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-500 disabled:opacity-60"
+                            >
+                              {isBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                              この内容で確定
+                            </button>
+                          </div>
+                        )}
                         <textarea
                           value={instructions[post.id] ?? ""}
                           onChange={(event) => onInstructionChange(post.id, event.target.value)}
@@ -217,18 +285,18 @@ export function PostsTable({
                         <div className="flex flex-wrap gap-2">
                           <button
                             onClick={() => onRewrite(post.id, "draft")}
-                            disabled={isRewriting}
+                            disabled={isBusy}
                             className="flex items-center gap-1.5 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
                           >
-                            {isRewriting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                            {isBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                             リライトして下書き保存
                           </button>
                           <button
                             onClick={() => onRewrite(post.id, "publish")}
-                            disabled={isRewriting}
+                            disabled={isBusy}
                             className="flex items-center gap-1.5 rounded-lg bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
                           >
-                            {isRewriting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                            {isBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                             リライトして即時公開
                           </button>
                         </div>

@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const DEFAULT_MODEL_NAME = "gemini-3.6-flash";
+export const DEFAULT_MODEL_NAME = "gemini-3.6-flash";
 
 /** Thrown when the upstream Gemini API reports a rate limit (HTTP 429). */
 export class GeminiRateLimitError extends Error {
@@ -18,7 +18,9 @@ export class GeminiAuthError extends Error {
   }
 }
 
-function getModelName(): string {
+function getModelName(modelOverride?: string): string {
+  const override = modelOverride?.trim();
+  if (override) return override;
   const modelName = process.env.GEMINI_MODEL_NAME?.trim();
   return modelName || DEFAULT_MODEL_NAME;
 }
@@ -80,10 +82,11 @@ ${instructionSection}
 export async function rewriteArticle(
   title: string,
   contentHtml: string,
-  instruction?: string
+  instruction?: string,
+  modelOverride?: string
 ): Promise<string> {
   const client = getClient();
-  const modelName = getModelName();
+  const modelName = getModelName(modelOverride);
   const model = client.getGenerativeModel({ model: modelName });
   const prompt = buildPrompt(title, contentHtml, formatCurrentDate(), instruction);
 

@@ -16,6 +16,7 @@ interface DashboardProps {
   initialPostsError: string | null;
   initialLogs: RewriteLog[];
   initialLogsError: string | null;
+  initialPendingPostIds: number[];
 }
 
 export function Dashboard({
@@ -24,6 +25,7 @@ export function Dashboard({
   initialPostsError,
   initialLogs,
   initialLogsError,
+  initialPendingPostIds,
 }: DashboardProps) {
   const [posts, setPosts] = useState<WordPressPostListItem[]>(initialPosts);
   const [postsLoading, setPostsLoading] = useState(false);
@@ -35,7 +37,10 @@ export function Dashboard({
   const [logs, setLogs] = useState<RewriteLog[]>(initialLogs);
   const [logsLoading, setLogsLoading] = useState(false);
 
-  const [rewritingPostId, setRewritingPostId] = useState<number | null>(null);
+  const [pendingPostIds, setPendingPostIds] = useState<Set<number>>(
+    new Set(initialPendingPostIds)
+  );
+  const [busyPostId, setBusyPostId] = useState<number | null>(null);
   const [bulkRunning, setBulkRunning] = useState(false);
   const [instructions, setInstructions] = useState<Record<number, string>>({});
 
@@ -55,6 +60,22 @@ export function Dashboard({
 
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  }, []);
+
+  const fetchPendingStates = useCallback(async (postIds: number[]) => {
+    if (postIds.length === 0) {
+      setPendingPostIds(new Set());
+      return;
+    }
+    try {
+      const res = await fetch(`/api/rewrite/state?postIds=${postIds.join(",")}`);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setPendingPostIds(new Set(data.pendingPostIds));
+      }
+    } catch {
+      // Non-fatal: pending badges just won't reflect the latest state.
+    }
   }, []);
 
   const fetchPosts = useCallback(
@@ -78,13 +99,16 @@ export function Dashboard({
         setTotalPages(Math.max(1, data.totalPages));
         setPage(nextPage);
         setSearch(nextSearch);
+        await fetchPendingStates(
+          (data.posts as WordPressPostListItem[]).map((post) => post.id)
+        );
       } catch (error) {
         pushToast("error", error instanceof Error ? error.message : "記事の取得に失敗しました。");
       } finally {
         setPostsLoading(false);
       }
     },
-    [pushToast]
+    [pushToast, fetchPendingStates]
   );
 
   const fetchLogs = useCallback(async () => {
@@ -107,7 +131,7 @@ export function Dashboard({
 
   const handleRewrite = useCallback(
     async (postId: number, publishStatus: PublishStatus) => {
-      setRewritingPostId(postId);
+      setBusyPostId(postId);
       try {
         const instruction = instructions[postId]?.trim() || undefined;
         const res = await fetch("/api/rewrite", {
@@ -132,10 +156,66 @@ export function Dashboard({
         pushToast("error", error instanceof Error ? error.message : "リライトに失敗しました。");
         await fetchLogs();
       } finally {
-        setRewritingPostId(null);
+        setBusyPostId(null);
       }
     },
     [fetchPosts, fetchLogs, page, search, pushToast, instructions]
+  );
+
+  const handleRevert = useCallback(
+    async (postId: number) => {
+      setBusyPostId(postId);
+      try {
+        const res = await fetch("/api/rewrite/revert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ postId }),
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error ?? "元に戻すのに失敗しました。");
+        }
+
+        pushToast("success", "リライト前の記事に戻しました。");
+        await Promise.all([fetchPosts(page, search), fetchLogs()]);
+      } catch (error) {
+        pushToast("error", error instanceof Error ? error.message : "元に戻すのに失敗しました。");
+      } finally {
+        setBusyPostId(null);
+      }
+    },
+    [fetchPosts, fetchLogs, page, search, pushToast]
+  );
+
+  const handleFinalize = useCallback(
+    async (postId: number) => {
+      setBusyPostId(postId);
+      try {
+        const res = await fetch("/api/rewrite/finalize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ postId }),
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error ?? "確定に失敗しました。");
+        }
+
+        pushToast("success", "リライト内容を確定しました。");
+        setPendingPostIds((prev) => {
+          const next = new Set(prev);
+          next.delete(postId);
+          return next;
+        });
+      } catch (error) {
+        pushToast("error", error instanceof Error ? error.message : "確定に失敗しました。");
+      } finally {
+        setBusyPostId(null);
+      }
+    },
+    [pushToast]
   );
 
   const handleBulkShortcut = useCallback(async () => {
@@ -212,10 +292,13 @@ export function Dashboard({
           page={page}
           totalPages={totalPages}
           onPageChange={handlePageChange}
-          rewritingPostId={rewritingPostId}
+          busyPostId={busyPostId}
           onRewrite={handleRewrite}
           instructions={instructions}
           onInstructionChange={handleInstructionChange}
+          pendingPostIds={pendingPostIds}
+          onRevert={handleRevert}
+          onFinalize={handleFinalize}
         />
         <HistoryPanel logs={logs} loading={logsLoading} />
       </div>

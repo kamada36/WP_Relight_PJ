@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Clock, History, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, History, RotateCcw, XCircle } from "lucide-react";
 import type { RewriteLog } from "@/types";
 
 interface HistoryPanelProps {
@@ -12,12 +12,14 @@ const STATUS_ICON = {
   success: CheckCircle2,
   failed: XCircle,
   pending: Clock,
+  reverted: RotateCcw,
 } as const;
 
 const STATUS_COLOR: Record<RewriteLog["status"], string> = {
   success: "text-emerald-500",
   failed: "text-red-500",
   pending: "text-amber-500",
+  reverted: "text-sky-500",
 };
 
 function formatDate(value: string): string {

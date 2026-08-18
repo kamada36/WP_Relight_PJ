@@ -1,6 +1,6 @@
 import { Dashboard } from "@/components/Dashboard";
 import { getPosts } from "@/lib/wordpress";
-import { getRewriteLogs } from "@/lib/supabase";
+import { getPendingPostIds, getRewriteLogs } from "@/lib/supabase";
 import type { RewriteLog, WordPressPostListItem } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +29,13 @@ export default async function DashboardPage() {
     initialLogsError = error instanceof Error ? error.message : "履歴の取得に失敗しました。";
   }
 
+  let initialPendingPostIds: number[] = [];
+  try {
+    initialPendingPostIds = await getPendingPostIds(initialPosts.map((post) => post.id));
+  } catch {
+    // Non-fatal: pending badges just won't show until the client refetches.
+  }
+
   return (
     <Dashboard
       initialPosts={initialPosts}
@@ -36,6 +43,7 @@ export default async function DashboardPage() {
       initialPostsError={initialPostsError}
       initialLogs={initialLogs}
       initialLogsError={initialLogsError}
+      initialPendingPostIds={initialPendingPostIds}
     />
   );
 }

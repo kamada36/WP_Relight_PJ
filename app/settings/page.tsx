@@ -2,7 +2,9 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { LogoutButton } from "@/components/LogoutButton";
 import { CronIntervalSettings } from "@/components/CronIntervalSettings";
+import { GeminiModelSettings } from "@/components/GeminiModelSettings";
 import { getAppSettings } from "@/lib/supabase";
+import { DEFAULT_MODEL_NAME } from "@/lib/gemini";
 
 export const dynamic = "force-dynamic";
 
@@ -26,12 +28,14 @@ function EnvStatus({ label, isSet }: { label: string; isSet: boolean }) {
 export default async function SettingsPage() {
   let cronIntervalDays = 1;
   let lastCronRunAt: string | null = null;
+  let geminiModel = DEFAULT_MODEL_NAME;
   let cronSettingsError: string | null = null;
 
   try {
     const settings = await getAppSettings();
     cronIntervalDays = settings.cronIntervalDays;
     lastCronRunAt = settings.lastCronRunAt;
+    geminiModel = settings.geminiModel;
   } catch (error) {
     cronSettingsError = error instanceof Error ? error.message : "設定の取得に失敗しました。";
   }
@@ -72,10 +76,13 @@ export default async function SettingsPage() {
           テーブルを作成してください。
         </div>
       ) : (
-        <CronIntervalSettings
-          initialIntervalDays={cronIntervalDays}
-          initialLastRunAt={lastCronRunAt}
-        />
+        <>
+          <CronIntervalSettings
+            initialIntervalDays={cronIntervalDays}
+            initialLastRunAt={lastCronRunAt}
+          />
+          <GeminiModelSettings initialModel={geminiModel} />
+        </>
       )}
 
       <div className="rounded-xl border border-zinc-200 bg-white p-4 sm:p-6 dark:border-zinc-800 dark:bg-zinc-950">
