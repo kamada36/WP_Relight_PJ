@@ -3,6 +3,7 @@
 import { Suspense, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, LockKeyhole } from "lucide-react";
+import { fetchJson } from "@/lib/api-client";
 
 function LoginForm() {
   const router = useRouter();
@@ -17,23 +18,17 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
+      await fetchJson("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
       });
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        setError(data.error ?? "ログインに失敗しました。");
-        return;
-      }
 
       const redirect = searchParams.get("redirect") || "/";
       router.push(redirect);
       router.refresh();
-    } catch {
-      setError("通信エラーが発生しました。");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "通信エラーが発生しました。");
     } finally {
       setLoading(false);
     }

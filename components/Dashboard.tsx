@@ -5,6 +5,7 @@ import { Header } from "@/components/Header";
 import { PostsTable } from "@/components/PostsTable";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { ToastStack, type ToastMessage } from "@/components/Toast";
+import { fetchJson } from "@/lib/api-client";
 import type { PublishStatus, RewriteLog, WordPressPostListItem } from "@/types";
 
 const PER_PAGE = 10;
@@ -68,11 +69,10 @@ export function Dashboard({
       return;
     }
     try {
-      const res = await fetch(`/api/rewrite/state?postIds=${postIds.join(",")}`);
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setPendingPostIds(new Set(data.pendingPostIds));
-      }
+      const data = await fetchJson<{ success: true; pendingPostIds: number[] }>(
+        `/api/rewrite/state?postIds=${postIds.join(",")}`
+      );
+      setPendingPostIds(new Set(data.pendingPostIds));
     } catch {
       // Non-fatal: pending badges just won't reflect the latest state.
     }
@@ -88,12 +88,11 @@ export function Dashboard({
         });
         if (nextSearch) params.set("search", nextSearch);
 
-        const res = await fetch(`/api/wordpress/posts?${params.toString()}`);
-        const data = await res.json();
-
-        if (!res.ok || !data.success) {
-          throw new Error(data.error ?? "記事の取得に失敗しました。");
-        }
+        const data = await fetchJson<{
+          success: true;
+          posts: WordPressPostListItem[];
+          totalPages: number;
+        }>(`/api/wordpress/posts?${params.toString()}`);
 
         setPosts(data.posts);
         setTotalPages(Math.max(1, data.totalPages));
@@ -114,13 +113,7 @@ export function Dashboard({
   const fetchLogs = useCallback(async () => {
     setLogsLoading(true);
     try {
-      const res = await fetch("/api/logs?limit=20");
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error ?? "履歴の取得に失敗しました。");
-      }
-
+      const data = await fetchJson<{ success: true; logs: RewriteLog[] }>("/api/logs?limit=20");
       setLogs(data.logs);
     } catch (error) {
       pushToast("error", error instanceof Error ? error.message : "履歴の取得に失敗しました。");
@@ -134,16 +127,11 @@ export function Dashboard({
       setBusyPostId(postId);
       try {
         const instruction = instructions[postId]?.trim() || undefined;
-        const res = await fetch("/api/rewrite", {
+        await fetchJson("/api/rewrite", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ postId, publishStatus, instruction }),
         });
-        const data = await res.json();
-
-        if (!res.ok || !data.success) {
-          throw new Error(data.error ?? "リライトに失敗しました。");
-        }
 
         pushToast(
           "success",
@@ -166,16 +154,11 @@ export function Dashboard({
     async (postId: number) => {
       setBusyPostId(postId);
       try {
-        const res = await fetch("/api/rewrite/revert", {
+        await fetchJson("/api/rewrite/revert", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ postId }),
         });
-        const data = await res.json();
-
-        if (!res.ok || !data.success) {
-          throw new Error(data.error ?? "元に戻すのに失敗しました。");
-        }
 
         pushToast("success", "リライト前の記事に戻しました。");
         await Promise.all([fetchPosts(page, search), fetchLogs()]);
@@ -192,16 +175,11 @@ export function Dashboard({
     async (postId: number) => {
       setBusyPostId(postId);
       try {
-        const res = await fetch("/api/rewrite/finalize", {
+        await fetchJson("/api/rewrite/finalize", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ postId }),
         });
-        const data = await res.json();
-
-        if (!res.ok || !data.success) {
-          throw new Error(data.error ?? "確定に失敗しました。");
-        }
 
         pushToast("success", "リライト内容を確定しました。");
         setPendingPostIds((prev) => {
@@ -221,14 +199,11 @@ export function Dashboard({
   const handleBulkShortcut = useCallback(async () => {
     setBulkRunning(true);
     try {
-      const res = await fetch("/api/wordpress/posts?per_page=1&order=asc");
-      const data = await res.json();
+      const data = await fetchJson<{ success: true; posts: WordPressPostListItem[] }>(
+        "/api/wordpress/posts?per_page=1&order=asc"
+      );
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error ?? "記事の取得に失敗しました。");
-      }
-
-      const oldest = data.posts[0] as WordPressPostListItem | undefined;
+      const oldest = data.posts[0];
       if (!oldest) {
         pushToast("error", "対象記事が見つかりませんでした。");
         return;

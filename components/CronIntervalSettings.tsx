@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import { fetchJson } from "@/lib/api-client";
 import { CRON_INTERVAL_OPTIONS, type CronIntervalDays } from "@/types";
 
 const OPTION_LABELS: Record<CronIntervalDays, string> = {
@@ -43,16 +44,11 @@ export function CronIntervalSettings({
     setError(null);
     setMessage(null);
     try {
-      const res = await fetch("/api/settings", {
+      await fetchJson("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cronIntervalDays: value }),
       });
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error ?? "設定の保存に失敗しました。");
-      }
 
       setIntervalDays(value);
       setMessage("保存しました。");

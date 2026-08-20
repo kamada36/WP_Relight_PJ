@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import { fetchJson } from "@/lib/api-client";
 import { GEMINI_MODEL_OPTIONS, type GeminiModelName } from "@/types";
 
 const MODEL_LABELS: Record<GeminiModelName, string> = {
@@ -24,16 +25,11 @@ export function GeminiModelSettings({ initialModel }: GeminiModelSettingsProps) 
     setError(null);
     setMessage(null);
     try {
-      const res = await fetch("/api/settings", {
+      await fetchJson("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ geminiModel: value }),
       });
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error ?? "設定の保存に失敗しました。");
-      }
 
       setModel(value);
       setMessage("保存しました。");
