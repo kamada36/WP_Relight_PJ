@@ -5,20 +5,25 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const password = body?.password;
 
-  if (typeof password !== "string" || !verifyPassword(password)) {
-    return NextResponse.json(
-      { success: false, error: "パスワードが正しくありません。" },
-      { status: 401 }
-    );
-  }
+  try {
+    if (typeof password !== "string" || !verifyPassword(password)) {
+      return NextResponse.json(
+        { success: false, error: "パスワードが正しくありません。" },
+        { status: 401 }
+      );
+    }
 
-  const response = NextResponse.json({ success: true });
-  response.cookies.set(SESSION_COOKIE_NAME, createSessionToken(), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7,
-  });
-  return response;
+    const response = NextResponse.json({ success: true });
+    response.cookies.set(SESSION_COOKIE_NAME, createSessionToken(), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    return response;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "不明なエラーが発生しました。";
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  }
 }
