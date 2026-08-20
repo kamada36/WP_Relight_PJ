@@ -45,6 +45,8 @@ export interface RewriteLog {
   status: RewriteStatus;
   original_content_snippet: string | null;
   rewritten_content_snippet: string | null;
+  /** Rough, non-detailed description of what changed, in Japanese (e.g. "見出しの言い回しを整理した"). */
+  summary: string | null;
   error_message: string | null;
   created_at: string;
 }
@@ -56,6 +58,7 @@ export interface RewriteLogInput {
   status: RewriteStatus;
   original_content_snippet?: string | null;
   rewritten_content_snippet?: string | null;
+  summary?: string | null;
   error_message?: string | null;
 }
 

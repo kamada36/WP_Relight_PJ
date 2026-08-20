@@ -59,6 +59,9 @@ export function HistoryPanel({ logs, loading }: HistoryPanelProps) {
                   <p className="text-xs text-zinc-500">
                     #{log.post_id} ・ {formatDate(log.created_at)}
                   </p>
+                  {log.status === "success" && log.summary && (
+                    <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{log.summary}</p>
+                  )}
                   {log.status === "failed" && log.error_message && (
                     <p className="mt-1 text-xs text-red-500">{log.error_message}</p>
                   )}

@@ -42,7 +42,12 @@ export async function performRewrite(
       // Fall back to GEMINI_MODEL_NAME / the built-in default.
     }
 
-    const rewrittenContent = await rewriteArticle(post.title, post.content, instruction, geminiModel);
+    const { content: rewrittenContent, summary } = await rewriteArticle(
+      post.title,
+      post.content,
+      instruction,
+      geminiModel
+    );
     const updated = await updatePost(postId, {
       content: rewrittenContent,
       status: publishStatus,
@@ -55,6 +60,7 @@ export async function performRewrite(
       status: "success",
       original_content_snippet: toSnippet(post.content),
       rewritten_content_snippet: toSnippet(rewrittenContent),
+      summary,
     });
 
     return { postId: updated.id, updatedUrl: updated.link };

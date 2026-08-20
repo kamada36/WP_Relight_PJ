@@ -50,6 +50,19 @@ function stripCodeFences(text: string): string {
   return fenceMatch ? fenceMatch[1].trim() : trimmed;
 }
 
+const SUMMARY_MARKER = /\n?===\s*SUMMARY\s*===\n?/i;
+
+/** Splits the model output into the rewritten HTML body and the trailing change summary section. */
+function splitContentAndSummary(text: string): { content: string; summary: string | null } {
+  const match = text.match(SUMMARY_MARKER);
+  if (!match || match.index === undefined) {
+    return { content: text.trim(), summary: null };
+  }
+  const content = text.slice(0, match.index).trim();
+  const summary = text.slice(match.index + match[0].length).trim() || null;
+  return { content, summary };
+}
+
 function buildPrompt(
   title: string,
   contentHtml: string,
@@ -74,9 +87,16 @@ ${instructionSection}
 2. 記事本文の最先端（先頭）に、以下のHTMLフォーマットで最終更新日を挿入すること。
    <p><em>【最終更新日: ${currentDate}】</em></p>
 3. HTMLタグは崩さず維持し、Markdownのコードブロック（\`\`\`html ... \`\`\`）等は含めず、直接挿入できる純粋なHTML本文のみを返却すること。
-4. 記事のタイトルや「以下がリライト結果です」等の余計な解説文は一切出力に含めないこと。${
-    instruction?.trim() ? "\n5. 上記の「この記事固有の追加指示」がある場合は、ルール1〜4と矛盾しない範囲で必ず反映すること。" : ""
+4. 記事のタイトルや「以下がリライト結果です」等の余計な解説文は一切出力に含めないこと。
+5. HTML本文の出力が終わったら、必ず単独の行に "===SUMMARY===" とだけ書き、その次の行から今回のリライトでどのような変更を加えたかの概要を日本語1〜2文で書くこと。変更前後の具体的な文言の引用や詳細な差分は書かず、「専門用語をかみ砕いて説明を追加した」「見出しの言い回しを整理した」のようなざっくりとした説明にすること。${
+    instruction?.trim() ? "\n6. 上記の「この記事固有の追加指示」がある場合は、ルール1〜4と矛盾しない範囲で必ず反映すること。" : ""
   }`;
+}
+
+export interface RewriteArticleResult {
+  content: string;
+  /** Rough, non-detailed description of what changed, in Japanese. Null if the model omitted it. */
+  summary: string | null;
 }
 
 export async function rewriteArticle(
@@ -84,7 +104,7 @@ export async function rewriteArticle(
   contentHtml: string,
   instruction?: string,
   modelOverride?: string
-): Promise<string> {
+): Promise<RewriteArticleResult> {
   const client = getClient();
   const modelName = getModelName(modelOverride);
   const model = client.getGenerativeModel({ model: modelName });
@@ -96,7 +116,7 @@ export async function rewriteArticle(
     if (!text.trim()) {
       throw new Error("Gemini API returned an empty response");
     }
-    return stripCodeFences(text);
+    return splitContentAndSummary(stripCodeFences(text));
   } catch (error) {
     if (error instanceof GeminiAuthError) throw error;
 

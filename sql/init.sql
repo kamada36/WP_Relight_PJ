@@ -9,9 +9,14 @@ CREATE TABLE IF NOT EXISTS rewrite_logs (
     status VARCHAR(50) NOT NULL, -- 'pending', 'success', 'failed'
     original_content_snippet TEXT,
     rewritten_content_snippet TEXT,
+    summary TEXT,
     error_message TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- 既存環境向け: テーブルが既にある場合に列を追加する。
+ALTER TABLE rewrite_logs
+    ADD COLUMN IF NOT EXISTS summary TEXT;
 
 -- 検索・絞り込み用インデックス
 CREATE INDEX IF NOT EXISTS idx_rewrite_logs_post_id ON rewrite_logs(post_id);

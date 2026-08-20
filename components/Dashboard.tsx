@@ -139,6 +139,7 @@ export function Dashboard({
             ? "リライトして公開しました。"
             : "リライトして下書き保存しました。"
         );
+        setPendingPostIds((prev) => new Set(prev).add(postId));
         await Promise.all([fetchPosts(page, search), fetchLogs()]);
       } catch (error) {
         pushToast("error", error instanceof Error ? error.message : "リライトに失敗しました。");
@@ -161,6 +162,11 @@ export function Dashboard({
         });
 
         pushToast("success", "リライト前の記事に戻しました。");
+        setPendingPostIds((prev) => {
+          const next = new Set(prev);
+          next.delete(postId);
+          return next;
+        });
         await Promise.all([fetchPosts(page, search), fetchLogs()]);
       } catch (error) {
         pushToast("error", error instanceof Error ? error.message : "元に戻すのに失敗しました。");
