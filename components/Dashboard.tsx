@@ -18,6 +18,7 @@ interface DashboardProps {
   initialLogs: RewriteLog[];
   initialLogsError: string | null;
   initialPendingPostIds: number[];
+  initialGeminiModel: string;
 }
 
 export function Dashboard({
@@ -27,6 +28,7 @@ export function Dashboard({
   initialLogs,
   initialLogsError,
   initialPendingPostIds,
+  initialGeminiModel,
 }: DashboardProps) {
   const [posts, setPosts] = useState<WordPressPostListItem[]>(initialPosts);
   const [postsLoading, setPostsLoading] = useState(false);
@@ -44,6 +46,7 @@ export function Dashboard({
   const [busyPostId, setBusyPostId] = useState<number | null>(null);
   const [bulkRunning, setBulkRunning] = useState(false);
   const [instructions, setInstructions] = useState<Record<number, string>>({});
+  const [geminiModel, setGeminiModel] = useState(initialGeminiModel);
 
   const handleInstructionChange = useCallback((postId: number, value: string) => {
     setInstructions((prev) => ({ ...prev, [postId]: value }));
@@ -121,6 +124,15 @@ export function Dashboard({
       setLogsLoading(false);
     }
   }, [pushToast]);
+
+  const fetchGeminiModel = useCallback(async () => {
+    try {
+      const data = await fetchJson<{ success: true; geminiModel?: string }>("/api/settings");
+      if (data.geminiModel) setGeminiModel(data.geminiModel);
+    } catch {
+      // Non-fatal: cost estimates just keep using the last known model.
+    }
+  }, []);
 
   const handleRewrite = useCallback(
     async (postId: number, publishStatus: PublishStatus) => {
@@ -265,7 +277,8 @@ export function Dashboard({
   const handleRefresh = useCallback(() => {
     fetchPosts(page, search);
     fetchLogs();
-  }, [fetchPosts, fetchLogs, page, search]);
+    fetchGeminiModel();
+  }, [fetchPosts, fetchLogs, fetchGeminiModel, page, search]);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 p-4 sm:gap-6 sm:p-6">
@@ -308,6 +321,7 @@ export function Dashboard({
           pendingPostIds={pendingPostIds}
           onRevert={handleRevert}
           onFinalize={handleFinalize}
+          geminiModel={geminiModel}
         />
         <HistoryPanel logs={logs} loading={logsLoading} />
       </div>

@@ -1,6 +1,7 @@
 import { Dashboard } from "@/components/Dashboard";
 import { getPosts } from "@/lib/wordpress";
-import { getPendingPostIds, getRewriteLogs } from "@/lib/supabase";
+import { getAppSettings, getPendingPostIds, getRewriteLogs } from "@/lib/supabase";
+import { DEFAULT_MODEL_NAME } from "@/lib/gemini";
 import type { RewriteLog, WordPressPostListItem } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,13 @@ export default async function DashboardPage() {
     // Non-fatal: pending badges just won't show until the client refetches.
   }
 
+  let initialGeminiModel = DEFAULT_MODEL_NAME;
+  try {
+    initialGeminiModel = (await getAppSettings()).geminiModel;
+  } catch {
+    // Non-fatal: cost estimates just fall back to the default model's pricing.
+  }
+
   return (
     <Dashboard
       initialPosts={initialPosts}
@@ -44,6 +52,7 @@ export default async function DashboardPage() {
       initialLogs={initialLogs}
       initialLogsError={initialLogsError}
       initialPendingPostIds={initialPendingPostIds}
+      initialGeminiModel={initialGeminiModel}
     />
   );
 }

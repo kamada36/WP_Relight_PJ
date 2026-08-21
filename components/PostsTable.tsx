@@ -2,6 +2,7 @@
 
 import { ExternalLink, Loader2, RotateCcw, Search } from "lucide-react";
 import type { PublishStatus, WordPressPostListItem } from "@/types";
+import { estimateRewriteCost, formatJpy } from "@/lib/gemini-pricing";
 
 interface PostsTableProps {
   posts: WordPressPostListItem[];
@@ -19,6 +20,7 @@ interface PostsTableProps {
   pendingPostIds: Set<number>;
   onRevert: (postId: number) => void;
   onFinalize: (postId: number) => void;
+  geminiModel: string;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -36,6 +38,33 @@ const STATUS_STYLES: Record<string, string> = {
   private: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
   future: "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300",
 };
+
+const MODEL_SHORT_LABELS: Record<string, string> = {
+  "gemini-3.6-flash": "Flash",
+  "gemini-3.6-flash-lite": "Flash-Lite",
+};
+
+function RewriteCostHint({
+  post,
+  instruction,
+  geminiModel,
+}: {
+  post: WordPressPostListItem;
+  instruction: string;
+  geminiModel: string;
+}) {
+  const estimate = estimateRewriteCost(
+    post.title.length + post.content.length,
+    geminiModel,
+    instruction.length
+  );
+  return (
+    <p className="text-xs text-zinc-400">
+      推定コスト: 約{formatJpy(estimate.costJpy)}（入出力合計約{" "}
+      {(estimate.inputTokens + estimate.outputTokens).toLocaleString("ja-JP")} トークン）
+    </p>
+  );
+}
 
 function formatDate(value: string): string {
   const date = new Date(value);
@@ -65,6 +94,7 @@ export function PostsTable({
   pendingPostIds,
   onRevert,
   onFinalize,
+  geminiModel,
 }: PostsTableProps) {
   return (
     <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
@@ -88,6 +118,10 @@ export function PostsTable({
           検索
         </button>
       </div>
+      <p className="border-b border-zinc-200 px-3 py-2 text-xs text-zinc-400 sm:px-4 dark:border-zinc-800">
+        コスト概算の基準モデル: {MODEL_SHORT_LABELS[geminiModel] ?? geminiModel}
+        （変更は設定ページから）
+      </p>
 
       {/* Mobile: card list (avoids squeezing a 5-column table into a narrow screen) */}
       <div className="divide-y divide-zinc-100 sm:hidden dark:divide-zinc-900">
@@ -159,6 +193,11 @@ export function PostsTable({
                   placeholder="この記事だけの指示（任意）例: もっとカジュアルな口調にする"
                   rows={2}
                   className="w-full resize-none rounded-lg border border-zinc-300 bg-transparent px-2.5 py-1.5 text-xs outline-none focus:border-zinc-500 dark:border-zinc-700"
+                />
+                <RewriteCostHint
+                  post={post}
+                  instruction={instructions[post.id] ?? ""}
+                  geminiModel={geminiModel}
                 />
                 <div className="flex flex-col gap-2">
                   <button
@@ -281,6 +320,11 @@ export function PostsTable({
                           placeholder="この記事だけの指示（任意）"
                           rows={2}
                           className="w-full resize-none rounded-lg border border-zinc-300 bg-transparent px-2.5 py-1.5 text-xs outline-none focus:border-zinc-500 dark:border-zinc-700"
+                        />
+                        <RewriteCostHint
+                          post={post}
+                          instruction={instructions[post.id] ?? ""}
+                          geminiModel={geminiModel}
                         />
                         <div className="flex flex-wrap gap-2">
                           <button
