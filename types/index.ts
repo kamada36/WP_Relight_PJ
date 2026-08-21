@@ -76,6 +76,7 @@ export interface RewriteResponse {
   success: boolean;
   postId?: number;
   updatedUrl?: string;
+  summary?: string | null;
   error?: string;
 }
 

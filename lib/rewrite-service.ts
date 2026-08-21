@@ -16,6 +16,7 @@ function toSnippet(html: string): string {
 export interface RewriteResult {
   postId: number;
   updatedUrl: string;
+  summary: string | null;
 }
 
 /**
@@ -63,7 +64,7 @@ export async function performRewrite(
       summary,
     });
 
-    return { postId: updated.id, updatedUrl: updated.link };
+    return { postId: updated.id, updatedUrl: updated.link, summary };
   } catch (error) {
     const message =
       error instanceof GeminiRateLimitError

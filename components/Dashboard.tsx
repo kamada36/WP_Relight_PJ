@@ -127,7 +127,12 @@ export function Dashboard({
       setBusyPostId(postId);
       try {
         const instruction = instructions[postId]?.trim() || undefined;
-        await fetchJson("/api/rewrite", {
+        const result = await fetchJson<{
+          success: true;
+          postId: number;
+          updatedUrl: string;
+          summary?: string | null;
+        }>("/api/rewrite", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ postId, publishStatus, instruction }),
@@ -140,6 +145,29 @@ export function Dashboard({
             : "リライトして下書き保存しました。"
         );
         setPendingPostIds((prev) => new Set(prev).add(postId));
+
+        // fetchLogs() below reconciles with the DB, but reflect the summary we
+        // already have immediately so the history panel isn't left waiting on
+        // a second round-trip to show it.
+        if (result.summary) {
+          const postTitle = posts.find((p) => p.id === postId)?.title ?? "";
+          setLogs((prev) => [
+            {
+              id: `optimistic-${postId}-${Date.now()}`,
+              post_id: postId,
+              post_title: postTitle,
+              post_url: result.updatedUrl,
+              status: "success",
+              original_content_snippet: null,
+              rewritten_content_snippet: null,
+              summary: result.summary ?? null,
+              error_message: null,
+              created_at: new Date().toISOString(),
+            },
+            ...prev,
+          ]);
+        }
+
         await Promise.all([fetchPosts(page, search), fetchLogs()]);
       } catch (error) {
         pushToast("error", error instanceof Error ? error.message : "リライトに失敗しました。");
@@ -148,7 +176,7 @@ export function Dashboard({
         setBusyPostId(null);
       }
     },
-    [fetchPosts, fetchLogs, page, search, pushToast, instructions]
+    [fetchPosts, fetchLogs, page, search, pushToast, instructions, posts]
   );
 
   const handleRevert = useCallback(
