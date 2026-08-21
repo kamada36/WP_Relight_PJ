@@ -37,16 +37,32 @@ function decodeHtmlEntities(text: string): string {
     .replace(/&nbsp;/g, " ");
 }
 
+// A slow/unreachable WordPress site would otherwise hang the calling page's
+// SSR indefinitely (fetch has no default timeout), which from the browser
+// looks like every button on the page stopped responding.
+const WP_FETCH_TIMEOUT_MS = 15_000;
+
 async function wpFetch(path: string, init?: RequestInit): Promise<Response> {
-  const res = await fetch(`${getBaseUrl()}/wp-json/wp/v2${path}`, {
-    ...init,
-    headers: {
-      Authorization: getAuthHeader(),
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${getBaseUrl()}/wp-json/wp/v2${path}`, {
+      ...init,
+      headers: {
+        Authorization: getAuthHeader(),
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(WP_FETCH_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new Error(
+        `WordPress APIへの接続がタイムアウトしました(${WP_FETCH_TIMEOUT_MS / 1000}秒)。WORDPRESS_URLが正しいか確認してください。`
+      );
+    }
+    throw error;
+  }
   return res;
 }
 

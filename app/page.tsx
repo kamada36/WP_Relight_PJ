@@ -9,39 +9,44 @@ export const dynamic = "force-dynamic";
 const PER_PAGE = 10;
 
 export default async function DashboardPage() {
+  // These three are independent of each other, so run them concurrently —
+  // awaiting them one at a time made the whole page (and therefore
+  // navigating back here from Settings) take as long as the sum of all
+  // three round-trips instead of the slowest one.
+  const [postsResult, logsResult, settingsResult] = await Promise.allSettled([
+    getPosts(1, PER_PAGE, ""),
+    getRewriteLogs(20),
+    getAppSettings(),
+  ]);
+
   let initialPosts: WordPressPostListItem[] = [];
   let initialTotalPages = 1;
   let initialPostsError: string | null = null;
-
-  try {
-    const result = await getPosts(1, PER_PAGE, "");
-    initialPosts = result.posts;
-    initialTotalPages = Math.max(1, result.totalPages);
-  } catch (error) {
-    initialPostsError = error instanceof Error ? error.message : "記事の取得に失敗しました。";
+  if (postsResult.status === "fulfilled") {
+    initialPosts = postsResult.value.posts;
+    initialTotalPages = Math.max(1, postsResult.value.totalPages);
+  } else {
+    initialPostsError =
+      postsResult.reason instanceof Error ? postsResult.reason.message : "記事の取得に失敗しました。";
   }
 
   let initialLogs: RewriteLog[] = [];
   let initialLogsError: string | null = null;
-
-  try {
-    initialLogs = await getRewriteLogs(20);
-  } catch (error) {
-    initialLogsError = error instanceof Error ? error.message : "履歴の取得に失敗しました。";
+  if (logsResult.status === "fulfilled") {
+    initialLogs = logsResult.value;
+  } else {
+    initialLogsError =
+      logsResult.reason instanceof Error ? logsResult.reason.message : "履歴の取得に失敗しました。";
   }
+
+  const initialGeminiModel =
+    settingsResult.status === "fulfilled" ? settingsResult.value.geminiModel : DEFAULT_MODEL_NAME;
 
   let initialPendingPostIds: number[] = [];
   try {
     initialPendingPostIds = await getPendingPostIds(initialPosts.map((post) => post.id));
   } catch {
     // Non-fatal: pending badges just won't show until the client refetches.
-  }
-
-  let initialGeminiModel = DEFAULT_MODEL_NAME;
-  try {
-    initialGeminiModel = (await getAppSettings()).geminiModel;
-  } catch {
-    // Non-fatal: cost estimates just fall back to the default model's pricing.
   }
 
   return (

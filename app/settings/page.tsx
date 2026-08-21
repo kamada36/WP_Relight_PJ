@@ -67,23 +67,20 @@ export default async function SettingsPage() {
         <LogoutButton />
       </div>
 
-      {cronSettingsError ? (
+      {cronSettingsError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          自動リライトの間隔設定を取得できませんでした:{cronSettingsError}
+          現在の設定値を取得できませんでした（以下は初期値を表示しています）:{cronSettingsError}
           <br />
           Supabaseで <code className="rounded bg-red-100 px-1 py-0.5 dark:bg-red-900">sql/init.sql</code>{" "}
           を再実行して <code className="rounded bg-red-100 px-1 py-0.5 dark:bg-red-900">app_settings</code>{" "}
-          テーブルを作成してください。
+          テーブルの列を最新化してください。
         </div>
-      ) : (
-        <>
-          <CronIntervalSettings
-            initialIntervalDays={cronIntervalDays}
-            initialLastRunAt={lastCronRunAt}
-          />
-          <GeminiModelSettings initialModel={geminiModel} />
-        </>
       )}
+      <CronIntervalSettings
+        initialIntervalDays={cronIntervalDays}
+        initialLastRunAt={lastCronRunAt}
+      />
+      <GeminiModelSettings initialModel={geminiModel} />
 
       <div className="rounded-xl border border-zinc-200 bg-white p-4 sm:p-6 dark:border-zinc-800 dark:bg-zinc-950">
         <h1 className="mb-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">設定</h1>
