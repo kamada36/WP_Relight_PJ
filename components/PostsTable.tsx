@@ -21,6 +21,26 @@ interface PostsTableProps {
   onRevert: (postId: number) => void;
   onFinalize: (postId: number) => void;
   geminiModel: string;
+  /** Live text streamed back from Gemini for the currently busy post's rewrite, if any. */
+  liveBody: string;
+}
+
+const LIVE_PREVIEW_TAIL_CHARS = 800;
+
+function LiveRewritePreview({ text }: { text: string }) {
+  if (!text) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
+        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+        生成を開始しています…
+      </div>
+    );
+  }
+  return (
+    <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+      {text.length > LIVE_PREVIEW_TAIL_CHARS ? `…${text.slice(-LIVE_PREVIEW_TAIL_CHARS)}` : text}
+    </pre>
+  );
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -95,6 +115,7 @@ export function PostsTable({
   onRevert,
   onFinalize,
   geminiModel,
+  liveBody,
 }: PostsTableProps) {
   return (
     <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
@@ -199,6 +220,7 @@ export function PostsTable({
                   instruction={instructions[post.id] ?? ""}
                   geminiModel={geminiModel}
                 />
+                {isBusy && <LiveRewritePreview text={liveBody} />}
                 <div className="flex flex-col gap-2">
                   <button
                     onClick={() => onRewrite(post.id, "draft")}
@@ -326,6 +348,7 @@ export function PostsTable({
                           instruction={instructions[post.id] ?? ""}
                           geminiModel={geminiModel}
                         />
+                        {isBusy && <LiveRewritePreview text={liveBody} />}
                         <div className="flex flex-wrap gap-2">
                           <button
                             onClick={() => onRewrite(post.id, "draft")}

@@ -27,27 +27,29 @@ export interface RewriteResult {
 export async function performRewrite(
   postId: number,
   publishStatus: PublishStatus,
-  instruction?: string
+  instruction?: string,
+  /** Called with each raw text delta as Gemini streams the rewrite in. */
+  onDelta?: (text: string) => void
 ): Promise<RewriteResult> {
-  const post = await getPost(postId);
+  // Independent reads: fetch the post and the configured model in parallel.
+  const [post, geminiModel] = await Promise.all([
+    getPost(postId),
+    getAppSettings()
+      .then((settings) => settings.geminiModel)
+      .catch(() => undefined), // Fall back to GEMINI_MODEL_NAME / the built-in default.
+  ]);
 
   // Keep the pre-rewrite content around (only on the first rewrite of an
   // unconfirmed cycle) so the user can revert even after rewriting repeatedly.
   await saveOriginalIfAbsent(postId, post.content, post.status);
 
   try {
-    let geminiModel: string | undefined;
-    try {
-      geminiModel = (await getAppSettings()).geminiModel;
-    } catch {
-      // Fall back to GEMINI_MODEL_NAME / the built-in default.
-    }
-
     const { content: rewrittenContent, summary } = await rewriteArticle(
       post.title,
       post.content,
       instruction,
-      geminiModel
+      geminiModel,
+      onDelta
     );
     const updated = await updatePost(postId, {
       content: rewrittenContent,

@@ -5,7 +5,7 @@ import { Header } from "@/components/Header";
 import { PostsTable } from "@/components/PostsTable";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { ToastStack, type ToastMessage } from "@/components/Toast";
-import { fetchJson } from "@/lib/api-client";
+import { fetchJson, streamRewrite } from "@/lib/api-client";
 import type { PublishStatus, RewriteLog, WordPressPostListItem } from "@/types";
 
 const PER_PAGE = 10;
@@ -44,6 +44,7 @@ export function Dashboard({
     new Set(initialPendingPostIds)
   );
   const [busyPostId, setBusyPostId] = useState<number | null>(null);
+  const [liveBody, setLiveBody] = useState("");
   const [bulkRunning, setBulkRunning] = useState(false);
   const [instructions, setInstructions] = useState<Record<number, string>>({});
   const [geminiModel, setGeminiModel] = useState(initialGeminiModel);
@@ -137,18 +138,10 @@ export function Dashboard({
   const handleRewrite = useCallback(
     async (postId: number, publishStatus: PublishStatus) => {
       setBusyPostId(postId);
+      setLiveBody("");
       try {
         const instruction = instructions[postId]?.trim() || undefined;
-        const result = await fetchJson<{
-          success: true;
-          postId: number;
-          updatedUrl: string;
-          summary?: string | null;
-        }>("/api/rewrite", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ postId, publishStatus, instruction }),
-        });
+        const result = await streamRewrite(postId, publishStatus, instruction, setLiveBody);
 
         pushToast(
           "success",
@@ -186,6 +179,7 @@ export function Dashboard({
         await fetchLogs();
       } finally {
         setBusyPostId(null);
+        setLiveBody("");
       }
     },
     [fetchPosts, fetchLogs, page, search, pushToast, instructions, posts]
@@ -322,6 +316,7 @@ export function Dashboard({
           onRevert={handleRevert}
           onFinalize={handleFinalize}
           geminiModel={geminiModel}
+          liveBody={liveBody}
         />
         <HistoryPanel logs={logs} loading={logsLoading} />
       </div>

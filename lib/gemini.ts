@@ -1,6 +1,16 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, FinishReason } from "@google/generative-ai";
+import { SUMMARY_DIVIDER } from "@/lib/rewrite-stream";
 
 export const DEFAULT_MODEL_NAME = "gemini-3.6-flash";
+
+/** Safety budget for the whole Gemini generation phase of a rewrite (ms). */
+export const SOFT_DEADLINE_MS = 280_000;
+/** Stop attempting further continuations once less than this remains before the deadline (ms). */
+const DEADLINE_MARGIN_MS = 12_000;
+/** Cap on auto-continuation calls when Gemini stops early with finishReason MAX_TOKENS. */
+const MAX_CONTINUATIONS = 2;
+/** How much trailing context to hand back to Gemini when asking it to continue. */
+const CONTINUATION_TAIL_CHARS = 1500;
 
 /** Thrown when the upstream Gemini API reports a rate limit (HTTP 429). */
 export class GeminiRateLimitError extends Error {
@@ -50,11 +60,9 @@ function stripCodeFences(text: string): string {
   return fenceMatch ? fenceMatch[1].trim() : trimmed;
 }
 
-const SUMMARY_MARKER = /\n?===\s*SUMMARY\s*===\n?/i;
-
 /** Splits the model output into the rewritten HTML body and the trailing change summary section. */
 function splitContentAndSummary(text: string): { content: string; summary: string | null } {
-  const match = text.match(SUMMARY_MARKER);
+  const match = text.match(SUMMARY_DIVIDER);
   if (!match || match.index === undefined) {
     return { content: text.trim(), summary: null };
   }
@@ -93,6 +101,16 @@ ${instructionSection}
   }`;
 }
 
+/** Asks the model to resume HTML output that was cut off mid-article by a MAX_TOKENS finish. */
+function buildContinuationPrompt(tailText: string): string {
+  return `直前のHTML本文生成が文字数上限で途中に打ち切られました。以下は出力済みテキストの末尾です。
+--- 末尾ここから ---
+${tailText}
+--- 末尾ここまで ---
+この続きから自然につながるように、HTML本文の続きだけを出力してください。上記末尾の文言を繰り返さないこと。挨拶や前置きは不要です。
+本文が完結したら、必ず単独の行に "===SUMMARY===" とだけ書き、その次の行から今回のリライトでどのような変更を加えたかの概要を日本語1〜2文で書くこと。`;
+}
+
 export interface RewriteArticleResult {
   content: string;
   /** Rough, non-detailed description of what changed, in Japanese. Null if the model omitted it. */
@@ -103,20 +121,48 @@ export async function rewriteArticle(
   title: string,
   contentHtml: string,
   instruction?: string,
-  modelOverride?: string
+  modelOverride?: string,
+  /** Called with each raw text delta as it streams in from Gemini, before any post-processing. */
+  onDelta?: (text: string) => void
 ): Promise<RewriteArticleResult> {
   const client = getClient();
   const modelName = getModelName(modelOverride);
   const model = client.getGenerativeModel({ model: modelName });
-  const prompt = buildPrompt(title, contentHtml, formatCurrentDate(), instruction);
+
+  const startedAt = Date.now();
+  let prompt = buildPrompt(title, contentHtml, formatCurrentDate(), instruction);
+  let raw = "";
+  let continuations = 0;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    if (!text.trim()) {
+    for (;;) {
+      const streamResult = await model.generateContentStream(prompt);
+      for await (const chunk of streamResult.stream) {
+        const text = chunk.text();
+        if (text) {
+          raw += text;
+          onDelta?.(text);
+        }
+      }
+      const finalResponse = await streamResult.response;
+      const finishReason = finalResponse.candidates?.[0]?.finishReason;
+
+      const remainingMs = SOFT_DEADLINE_MS - (Date.now() - startedAt);
+      const canContinue =
+        finishReason === FinishReason.MAX_TOKENS &&
+        continuations < MAX_CONTINUATIONS &&
+        remainingMs > DEADLINE_MARGIN_MS;
+
+      if (!canContinue) break;
+
+      continuations += 1;
+      prompt = buildContinuationPrompt(raw.slice(-CONTINUATION_TAIL_CHARS));
+    }
+
+    if (!raw.trim()) {
       throw new Error("Gemini API returned an empty response");
     }
-    return splitContentAndSummary(stripCodeFences(text));
+    return splitContentAndSummary(stripCodeFences(raw));
   } catch (error) {
     if (error instanceof GeminiAuthError) throw error;
 

@@ -4,8 +4,10 @@ import { performRewrite } from "@/lib/rewrite-service";
 import { verifyCronSecret } from "@/lib/auth";
 import { getAppSettings, markCronRun } from "@/lib/supabase";
 
-// Gemini + WordPress round-trip can exceed the platform's default function timeout.
-export const maxDuration = 60;
+// Long rewrites (large articles + Gemini auto-continuation + WordPress sync)
+// can run well past Vercel's default function timeout. Keep this comfortably
+// above lib/gemini's SOFT_DEADLINE_MS (280s) plus WordPress/Supabase I/O.
+export const maxDuration = 300;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
