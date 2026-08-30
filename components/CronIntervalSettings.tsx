@@ -10,6 +10,7 @@ const OPTION_LABELS: Record<CronIntervalDays, string> = {
   2: "2日おき",
   3: "3日おき",
   7: "週1回(7日おき)",
+  0: "自動リライトしない",
 };
 
 interface CronIntervalSettingsProps {
@@ -65,7 +66,7 @@ export function CronIntervalSettings({
         自動リライトの間隔
       </h2>
       <p className="mb-4 text-sm text-zinc-500">
-        Vercel Cron自体は1日1回呼び出されますが(vercel.jsonで設定)、実際にリライトを実行する間隔はここから調整できます。
+        Vercel Cron自体は1日1回呼び出されますが(vercel.jsonで設定)、実際にリライトを実行する間隔はここから調整できます。「自動リライトしない」を選ぶと、Cronが呼ばれても記事のリライトは行われません。
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -90,6 +91,12 @@ export function CronIntervalSettings({
         <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">{message}</p>
       )}
       {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
+
+      {intervalDays === 0 && (
+        <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
+          自動リライトは無効です。記事のリライトは手動でのみ実行されます。
+        </p>
+      )}
 
       <p className="mt-4 text-xs text-zinc-500">
         前回の自動実行: {formatDate(initialLastRunAt)}

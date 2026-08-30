@@ -25,6 +25,16 @@ async function handle(request: NextRequest) {
     // actual rewrite cadence is user-configurable from the Settings page, so
     // skip here if the configured interval hasn't elapsed yet.
     const settings = await getAppSettings();
+
+    // 間隔に 0 を設定すると自動リライトを完全に無効化する。
+    if (!settings.cronIntervalDays || settings.cronIntervalDays <= 0) {
+      return NextResponse.json({
+        success: true,
+        skipped: true,
+        message: "自動リライトが無効に設定されているためスキップしました。",
+      });
+    }
+
     if (settings.lastCronRunAt) {
       const intervalMs = settings.cronIntervalDays * DAY_MS;
       const elapsedMs = Date.now() - new Date(settings.lastCronRunAt).getTime();
