@@ -87,7 +87,8 @@ export interface ApiErrorResponse {
 
 // App settings (Cron interval / Gemini model)
 
-export const CRON_INTERVAL_OPTIONS = [1, 2, 3, 7] as const;
+// 0 = 自動リライトを行わない（Cronが呼ばれても何もしない）
+export const CRON_INTERVAL_OPTIONS = [1, 2, 3, 7, 0] as const;
 export type CronIntervalDays = (typeof CRON_INTERVAL_OPTIONS)[number];
 
 // Pro is intentionally excluded (cost).
