@@ -47,3 +47,25 @@ CREATE TABLE IF NOT EXISTS post_rewrite_state (
     original_status VARCHAR(50) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- 内部リンク機能: 公開記事ごとのURL・概要・キーワードの一覧（記事インデックス）。
+-- 概要が NULL の行は Gemini での生成に失敗したもので、次回の同期で再試行される。
+CREATE TABLE IF NOT EXISTS article_index (
+    post_id BIGINT PRIMARY KEY,
+    title TEXT NOT NULL,
+    url TEXT NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'publish',
+    summary TEXT,
+    keywords TEXT[] NOT NULL DEFAULT '{}',
+    synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    summarized_at TIMESTAMP WITH TIME ZONE
+);
+
+-- 内部リンク機能: 記事ごとのマッチング結果。
+-- suggestions は [{ "post_id": 123, "reason": "..." }] の配列（0〜3件）。
+-- 行が無い = 未マッチング / 行があり空配列 = マッチング済みで該当なし。
+CREATE TABLE IF NOT EXISTS article_link_suggestions (
+    post_id BIGINT PRIMARY KEY,
+    suggestions JSONB NOT NULL DEFAULT '[]'::jsonb,
+    computed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);

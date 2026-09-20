@@ -4,9 +4,18 @@ import { useCallback, useState } from "react";
 import { Header } from "@/components/Header";
 import { PostsTable } from "@/components/PostsTable";
 import { HistoryPanel } from "@/components/HistoryPanel";
+import type { InternalLinkControls } from "@/components/LinkSuggestions";
 import { ToastStack, type ToastMessage } from "@/components/Toast";
 import { fetchJson, streamRewrite } from "@/lib/api-client";
-import type { PublishStatus, RewriteLog, WordPressPostListItem } from "@/types";
+import { isUrlLinkedInHtml, normalizeUrl } from "@/lib/internal-links";
+import { useInternalLinkFormat } from "@/lib/use-internal-link-format";
+import {
+  type LinkSuggestion,
+  type MatchBatchResult,
+  type PublishStatus,
+  type RewriteLog,
+  type WordPressPostListItem,
+} from "@/types";
 
 const PER_PAGE = 10;
 const TOAST_DURATION_MS = 5000;
@@ -19,6 +28,11 @@ interface DashboardProps {
   initialLogsError: string | null;
   initialPendingPostIds: number[];
   initialGeminiModel: string;
+  /** Stored internal-link candidates for the initial posts (postId -> candidates; missing = not matched yet). */
+  initialLinkSuggestions: Record<number, LinkSuggestion[]>;
+  /** Articles in the index; null when it couldn't be read (see initialLinkSuggestionsError). */
+  initialIndexedCount: number | null;
+  initialLinkSuggestionsError: string | null;
 }
 
 export function Dashboard({
@@ -29,6 +43,9 @@ export function Dashboard({
   initialLogsError,
   initialPendingPostIds,
   initialGeminiModel,
+  initialLinkSuggestions,
+  initialIndexedCount,
+  initialLinkSuggestionsError,
 }: DashboardProps) {
   const [posts, setPosts] = useState<WordPressPostListItem[]>(initialPosts);
   const [postsLoading, setPostsLoading] = useState(false);
@@ -48,6 +65,18 @@ export function Dashboard({
   const [bulkRunning, setBulkRunning] = useState(false);
   const [instructions, setInstructions] = useState<Record<number, string>>({});
   const [geminiModel, setGeminiModel] = useState(initialGeminiModel);
+
+  // Internal-link candidates (matched from the article index) shown under each post's instruction box.
+  const [linkSuggestions, setLinkSuggestions] =
+    useState<Record<number, LinkSuggestion[]>>(initialLinkSuggestions);
+  const [indexedCount, setIndexedCount] = useState<number | null>(initialIndexedCount);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(
+    initialLinkSuggestionsError
+  );
+  const [findingPostId, setFindingPostId] = useState<number | null>(null);
+  const [selectedLinkIds, setSelectedLinkIds] = useState<Record<number, number[]>>({});
+  const [linkFormat, handleLinkFormatChange] = useInternalLinkFormat();
 
   const handleInstructionChange = useCallback((postId: number, value: string) => {
     setInstructions((prev) => ({ ...prev, [postId]: value }));
@@ -82,6 +111,53 @@ export function Dashboard({
     }
   }, []);
 
+  /** Loads stored candidates for the given posts (used after the visible page changes). */
+  const fetchSuggestions = useCallback(async (postIds: number[]) => {
+    if (postIds.length === 0) return;
+    setSuggestionsLoading(true);
+    setSuggestionsError(null);
+    try {
+      const data = await fetchJson<{
+        success: true;
+        indexedCount: number;
+        results: Record<string, LinkSuggestion[]>;
+      }>(`/api/articles/suggestions?postIds=${postIds.join(",")}`);
+      setIndexedCount(data.indexedCount);
+      setLinkSuggestions((prev) => ({ ...prev, ...data.results }));
+    } catch (error) {
+      // Non-fatal: the rest of the dashboard works without link candidates
+      // (e.g. before the article_index migration has been applied).
+      setSuggestionsError(error instanceof Error ? error.message : "取得に失敗しました。");
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, []);
+
+  const handleToggleLink = useCallback((postId: number, targetId: number) => {
+    setSelectedLinkIds((prev) => {
+      const current = prev[postId] ?? [];
+      return {
+        ...prev,
+        [postId]: current.includes(targetId)
+          ? current.filter((id) => id !== targetId)
+          : [...current, targetId],
+      };
+    });
+  }, []);
+
+  /** Ticked candidates for a post, minus any the body already links to, in the shape the rewrite API takes. */
+  const getSelectedLinks = useCallback(
+    (postId: number) => {
+      const ids = selectedLinkIds[postId];
+      if (!ids?.length) return [];
+      const content = posts.find((post) => post.id === postId)?.content ?? "";
+      return (linkSuggestions[postId] ?? [])
+        .filter((s) => ids.includes(s.post_id) && !isUrlLinkedInHtml(content, s.url))
+        .map((s) => ({ url: s.url, title: s.title, reason: s.reason || undefined }));
+    },
+    [selectedLinkIds, linkSuggestions, posts]
+  );
+
   const fetchPosts = useCallback(
     async (nextPage: number, nextSearch: string) => {
       setPostsLoading(true);
@@ -102,16 +178,16 @@ export function Dashboard({
         setTotalPages(Math.max(1, data.totalPages));
         setPage(nextPage);
         setSearch(nextSearch);
-        await fetchPendingStates(
-          (data.posts as WordPressPostListItem[]).map((post) => post.id)
-        );
+        const postIds = (data.posts as WordPressPostListItem[]).map((post) => post.id);
+        void fetchSuggestions(postIds);
+        await fetchPendingStates(postIds);
       } catch (error) {
         pushToast("error", error instanceof Error ? error.message : "記事の取得に失敗しました。");
       } finally {
         setPostsLoading(false);
       }
     },
-    [pushToast, fetchPendingStates]
+    [pushToast, fetchPendingStates, fetchSuggestions]
   );
 
   const fetchLogs = useCallback(async () => {
@@ -135,13 +211,51 @@ export function Dashboard({
     }
   }, []);
 
+  const handleFindSuggestions = useCallback(
+    async (postId: number) => {
+      setFindingPostId(postId);
+      try {
+        const data = await fetchJson<{ success: true } & MatchBatchResult>("/api/articles/match", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ postIds: [postId], force: true }),
+        });
+        if (data.failed.length > 0) throw new Error(data.failed[0].error);
+
+        const found = data.results[postId] ?? [];
+        setLinkSuggestions((prev) => ({ ...prev, [postId]: found }));
+        // Forget ticks for candidates that are no longer suggested.
+        setSelectedLinkIds((prev) => ({
+          ...prev,
+          [postId]: (prev[postId] ?? []).filter((id) => found.some((s) => s.post_id === id)),
+        }));
+        setIndexedCount((prev) => prev ?? 1);
+      } catch (error) {
+        pushToast("error", error instanceof Error ? error.message : "リンク候補の検索に失敗しました。");
+      } finally {
+        setFindingPostId(null);
+      }
+    },
+    [pushToast]
+  );
+
   const handleRewrite = useCallback(
     async (postId: number, publishStatus: PublishStatus) => {
       setBusyPostId(postId);
       setLiveBody("");
       try {
         const instruction = instructions[postId]?.trim() || undefined;
-        const result = await streamRewrite(postId, publishStatus, instruction, setLiveBody);
+        const internalLinks = getSelectedLinks(postId);
+        const result = await streamRewrite(
+          postId,
+          publishStatus,
+          {
+            instruction,
+            internalLinks: internalLinks.length > 0 ? internalLinks : undefined,
+            internalLinkFormat: internalLinks.length > 0 ? linkFormat : undefined,
+          },
+          setLiveBody
+        );
 
         pushToast(
           "success",
@@ -149,6 +263,25 @@ export function Dashboard({
             ? "リライトして公開しました。"
             : "リライトして下書き保存しました。"
         );
+
+        // Links that made it into the body are done (the candidate list flags them "リンク済み" after the
+        // refetch below); keep only the ones Gemini skipped ticked so a re-run retries just those.
+        const missingKeys = new Set(result.missingLinkUrls.map((url) => normalizeUrl(url)));
+        if (missingKeys.size > 0) {
+          const missing = internalLinks.filter((link) => missingKeys.has(normalizeUrl(link.url)));
+          pushToast(
+            "warning",
+            `内部リンク${missing.length}件が本文に挿入されませんでした（${missing
+              .map((link) => `「${link.title}」`)
+              .join("、")}）。もう一度リライトすると再試行できます。`
+          );
+        }
+        setSelectedLinkIds((prev) => ({
+          ...prev,
+          [postId]: (linkSuggestions[postId] ?? [])
+            .filter((s) => missingKeys.has(normalizeUrl(s.url)))
+            .map((s) => s.post_id),
+        }));
         setPendingPostIds((prev) => new Set(prev).add(postId));
 
         // fetchLogs() below reconciles with the DB, but reflect the summary we
@@ -182,7 +315,18 @@ export function Dashboard({
         setLiveBody("");
       }
     },
-    [fetchPosts, fetchLogs, page, search, pushToast, instructions, posts]
+    [
+      fetchPosts,
+      fetchLogs,
+      page,
+      search,
+      pushToast,
+      instructions,
+      posts,
+      getSelectedLinks,
+      linkFormat,
+      linkSuggestions,
+    ]
   );
 
   const handleRevert = useCallback(
@@ -274,6 +418,20 @@ export function Dashboard({
     fetchGeminiModel();
   }, [fetchPosts, fetchLogs, fetchGeminiModel, page, search]);
 
+  const internalLinkControls: InternalLinkControls = {
+    suggestions: linkSuggestions,
+    indexedCount,
+    loading: suggestionsLoading,
+    error: suggestionsError,
+    findingPostId,
+    selectedIds: selectedLinkIds,
+    format: linkFormat,
+    onToggle: handleToggleLink,
+    onFind: handleFindSuggestions,
+    onFormatChange: handleLinkFormatChange,
+    getSelectedLinks,
+  };
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 p-4 sm:gap-6 sm:p-6">
       <Header
@@ -316,6 +474,7 @@ export function Dashboard({
           onRevert={handleRevert}
           onFinalize={handleFinalize}
           geminiModel={geminiModel}
+          internalLinks={internalLinkControls}
           liveBody={liveBody}
         />
         <HistoryPanel logs={logs} loading={logsLoading} />

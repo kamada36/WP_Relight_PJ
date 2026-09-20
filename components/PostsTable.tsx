@@ -3,6 +3,8 @@
 import { ExternalLink, Loader2, RotateCcw, Search } from "lucide-react";
 import type { PublishStatus, WordPressPostListItem } from "@/types";
 import { estimateRewriteCost, formatJpy } from "@/lib/gemini-pricing";
+import { buildInternalLinkPromptSection } from "@/lib/internal-links";
+import { LinkSuggestionsPanel, type InternalLinkControls } from "@/components/LinkSuggestions";
 
 interface PostsTableProps {
   posts: WordPressPostListItem[];
@@ -21,6 +23,8 @@ interface PostsTableProps {
   onRevert: (postId: number) => void;
   onFinalize: (postId: number) => void;
   geminiModel: string;
+  /** Internal-link candidates shown under each article's instruction box. */
+  internalLinks: InternalLinkControls;
   /** Live text streamed back from Gemini for the currently busy post's rewrite, if any. */
   liveBody: string;
 }
@@ -67,16 +71,19 @@ const MODEL_SHORT_LABELS: Record<string, string> = {
 function RewriteCostHint({
   post,
   instruction,
+  extraPromptChars,
   geminiModel,
 }: {
   post: WordPressPostListItem;
   instruction: string;
+  /** Prompt characters added on top of the typed instruction (e.g. the internal-link section). */
+  extraPromptChars: number;
   geminiModel: string;
 }) {
   const estimate = estimateRewriteCost(
     post.title.length + post.content.length,
     geminiModel,
-    instruction.length
+    instruction.length + extraPromptChars
   );
   return (
     <p className="text-xs text-zinc-400">
@@ -115,8 +122,14 @@ export function PostsTable({
   onRevert,
   onFinalize,
   geminiModel,
+  internalLinks,
   liveBody,
 }: PostsTableProps) {
+  /** Length of the prompt section that the ticked internal links will add to this post's rewrite. */
+  const linkPromptChars = (postId: number) =>
+    buildInternalLinkPromptSection(internalLinks.getSelectedLinks(postId), internalLinks.format)
+      .length;
+
   return (
     <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
       <div className="flex flex-col gap-2 border-b border-zinc-200 p-3 sm:flex-row sm:items-center sm:p-4 dark:border-zinc-800">
@@ -215,9 +228,16 @@ export function PostsTable({
                   rows={2}
                   className="w-full resize-none rounded-lg border border-zinc-300 bg-transparent px-2.5 py-1.5 text-xs outline-none focus:border-zinc-500 dark:border-zinc-700"
                 />
+                <LinkSuggestionsPanel
+                  postId={post.id}
+                  postContent={post.content}
+                  controls={internalLinks}
+                  disabled={isBusy}
+                />
                 <RewriteCostHint
                   post={post}
                   instruction={instructions[post.id] ?? ""}
+                  extraPromptChars={linkPromptChars(post.id)}
                   geminiModel={geminiModel}
                 />
                 {isBusy && <LiveRewritePreview text={liveBody} />}
@@ -343,9 +363,16 @@ export function PostsTable({
                           rows={2}
                           className="w-full resize-none rounded-lg border border-zinc-300 bg-transparent px-2.5 py-1.5 text-xs outline-none focus:border-zinc-500 dark:border-zinc-700"
                         />
+                        <LinkSuggestionsPanel
+                          postId={post.id}
+                          postContent={post.content}
+                          controls={internalLinks}
+                          disabled={isBusy}
+                        />
                         <RewriteCostHint
                           post={post}
                           instruction={instructions[post.id] ?? ""}
+                          extraPromptChars={linkPromptChars(post.id)}
                           geminiModel={geminiModel}
                         />
                         {isBusy && <LiveRewritePreview text={liveBody} />}
