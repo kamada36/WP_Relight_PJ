@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { RefreshCw, Settings, Zap } from "lucide-react";
+import { Library, RefreshCw, Settings, Zap } from "lucide-react";
 
 interface HeaderProps {
   onRefresh: () => void;
@@ -37,6 +37,14 @@ export function Header({ onRefresh, refreshing, onBulkShortcut, bulkRunning }: H
           <RefreshCw className={`h-4 w-4 shrink-0 ${refreshing ? "animate-spin" : ""}`} />
           更新
         </button>
+        <Link
+          href="/articles"
+          title="全記事のURL・概要の一覧と、内部リンク候補のマッチングを管理します"
+          className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 sm:py-1.5 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+        >
+          <Library className="h-4 w-4 shrink-0" />
+          記事インデックス
+        </Link>
         <Link
           href="/settings"
           className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 sm:py-1.5 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"

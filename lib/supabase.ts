@@ -1,6 +1,13 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_MODEL_NAME } from "@/lib/gemini";
-import type { AppSettings, PendingRewriteState, RewriteLog, RewriteLogInput } from "@/types";
+import type {
+  AppSettings,
+  ArticleIndexEntry,
+  PendingRewriteState,
+  RewriteLog,
+  RewriteLogInput,
+  StoredLinkSuggestion,
+} from "@/types";
 
 const APP_SETTINGS_ID = 1;
 const POST_REWRITE_STATE_TABLE = "post_rewrite_state";
@@ -161,5 +168,162 @@ export async function clearPendingRewriteState(postId: number): Promise<void> {
 
   if (error) {
     console.error("Failed to clear pending rewrite state:", error.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Article index / internal-link suggestions
+// ---------------------------------------------------------------------------
+
+const ARTICLE_INDEX_TABLE = "article_index";
+const LINK_SUGGESTIONS_TABLE = "article_link_suggestions";
+const ARTICLE_INDEX_COLUMNS =
+  "post_id, title, url, status, summary, keywords, synced_at, summarized_at";
+
+/** PostgREST caps a single response at 1000 rows by default, so bigger tables must be read in ranges. */
+const READ_PAGE_SIZE = 1000;
+/** `.in()` filters travel in the URL, so keep id lists short. */
+const ID_FILTER_CHUNK = 100;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
+
+export async function getAllArticleIndexEntries(): Promise<ArticleIndexEntry[]> {
+  const supabase = getClient();
+  const entries: ArticleIndexEntry[] = [];
+
+  for (let from = 0; ; from += READ_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from(ARTICLE_INDEX_TABLE)
+      .select(ARTICLE_INDEX_COLUMNS)
+      .order("post_id", { ascending: true })
+      .range(from, from + READ_PAGE_SIZE - 1);
+
+    if (error) {
+      throw new Error(`Failed to fetch article index: ${error.message}`);
+    }
+    entries.push(...((data ?? []) as ArticleIndexEntry[]));
+    if (!data || data.length < READ_PAGE_SIZE) break;
+  }
+
+  return entries;
+}
+
+export async function getArticleIndexEntries(postIds: number[]): Promise<ArticleIndexEntry[]> {
+  if (postIds.length === 0) return [];
+
+  const supabase = getClient();
+  const rows: ArticleIndexEntry[] = [];
+  for (const ids of chunk(postIds, ID_FILTER_CHUNK)) {
+    const { data, error } = await supabase
+      .from(ARTICLE_INDEX_TABLE)
+      .select(ARTICLE_INDEX_COLUMNS)
+      .in("post_id", ids);
+
+    if (error) {
+      throw new Error(`Failed to fetch article index: ${error.message}`);
+    }
+    rows.push(...((data ?? []) as ArticleIndexEntry[]));
+  }
+  return rows;
+}
+
+/** Number of indexed articles that already have a summary (i.e. are usable for matching). */
+export async function countSummarizedArticles(): Promise<number> {
+  const supabase = getClient();
+  const { count, error } = await supabase
+    .from(ARTICLE_INDEX_TABLE)
+    .select("post_id", { count: "exact", head: true })
+    .not("summary", "is", null);
+
+  if (error) {
+    throw new Error(`Failed to count article index: ${error.message}`);
+  }
+  return count ?? 0;
+}
+
+export async function upsertArticleIndexEntries(
+  entries: Omit<ArticleIndexEntry, "synced_at">[]
+): Promise<void> {
+  if (entries.length === 0) return;
+
+  const supabase = getClient();
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from(ARTICLE_INDEX_TABLE)
+    .upsert(entries.map((entry) => ({ ...entry, synced_at: now })), { onConflict: "post_id" });
+
+  if (error) {
+    throw new Error(`Failed to save article index: ${error.message}`);
+  }
+}
+
+/** Removes index rows (and their link suggestions) for posts that no longer exist / are no longer published. */
+export async function deleteArticleIndexEntries(postIds: number[]): Promise<void> {
+  const supabase = getClient();
+  for (const ids of chunk(postIds, ID_FILTER_CHUNK)) {
+    for (const table of [ARTICLE_INDEX_TABLE, LINK_SUGGESTIONS_TABLE]) {
+      const { error } = await supabase.from(table).delete().in("post_id", ids);
+      if (error) {
+        throw new Error(`Failed to delete stale article index rows: ${error.message}`);
+      }
+    }
+  }
+}
+
+export async function getLinkSuggestionRecords(
+  postIds?: number[]
+): Promise<Map<number, StoredLinkSuggestion[]>> {
+  const supabase = getClient();
+  const records = new Map<number, StoredLinkSuggestion[]>();
+
+  const collect = (rows: { post_id: number; suggestions: StoredLinkSuggestion[] }[] | null) => {
+    for (const row of rows ?? []) records.set(row.post_id, row.suggestions ?? []);
+  };
+
+  if (postIds) {
+    for (const ids of chunk(postIds, ID_FILTER_CHUNK)) {
+      const { data, error } = await supabase
+        .from(LINK_SUGGESTIONS_TABLE)
+        .select("post_id, suggestions")
+        .in("post_id", ids);
+      if (error) {
+        throw new Error(`Failed to fetch link suggestions: ${error.message}`);
+      }
+      collect(data);
+    }
+    return records;
+  }
+
+  for (let from = 0; ; from += READ_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from(LINK_SUGGESTIONS_TABLE)
+      .select("post_id, suggestions")
+      .order("post_id", { ascending: true })
+      .range(from, from + READ_PAGE_SIZE - 1);
+    if (error) {
+      throw new Error(`Failed to fetch link suggestions: ${error.message}`);
+    }
+    collect(data);
+    if (!data || data.length < READ_PAGE_SIZE) break;
+  }
+  return records;
+}
+
+export async function saveLinkSuggestions(
+  postId: number,
+  suggestions: StoredLinkSuggestion[]
+): Promise<void> {
+  const supabase = getClient();
+  const { error } = await supabase.from(LINK_SUGGESTIONS_TABLE).upsert(
+    { post_id: postId, suggestions, computed_at: new Date().toISOString() },
+    { onConflict: "post_id" }
+  );
+
+  if (error) {
+    throw new Error(`Failed to save link suggestions: ${error.message}`);
   }
 }

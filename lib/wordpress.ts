@@ -121,6 +121,38 @@ export async function getPosts(
   return { posts: data.map(toListItem), total, totalPages };
 }
 
+/**
+ * One page of published posts for building the article index. Ordered by ID
+ * (not last-modified like getPosts) so page boundaries stay stable even if a
+ * rewrite bumps a post's modified date while a multi-page sync is running.
+ */
+export async function getPublishedPostsPage(
+  page: number,
+  perPage: number
+): Promise<{ posts: WordPressPostListItem[]; total: number; totalPages: number }> {
+  const params = new URLSearchParams({
+    page: String(page),
+    per_page: String(perPage),
+    status: "publish",
+    orderby: "id",
+    order: "asc",
+    _fields: "id,title,content,modified,status,link",
+  });
+
+  const res = await wpFetch(`/posts?${params.toString()}`);
+  // WordPress answers 400 (rest_post_invalid_page_number) for a page past the end; that just means "no more posts".
+  if (res.status === 400 && page > 1) {
+    return { posts: [], total: 0, totalPages: page - 1 };
+  }
+  await assertOk(res);
+
+  const data = (await res.json()) as WpApiPost[];
+  const total = Number(res.headers.get("X-WP-Total") ?? data.length);
+  const totalPages = Number(res.headers.get("X-WP-TotalPages") ?? 1);
+
+  return { posts: data.map(toListItem), total, totalPages };
+}
+
 export async function getPost(id: number): Promise<WordPressPost> {
   const res = await wpFetch(`/posts/${id}?context=edit`);
   await assertOk(res);

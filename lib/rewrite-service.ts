@@ -1,7 +1,8 @@
 import { getPost, updatePost } from "@/lib/wordpress";
-import { rewriteArticle, GeminiRateLimitError, GeminiAuthError } from "@/lib/gemini";
+import { rewriteArticle, describeGeminiError } from "@/lib/gemini";
+import { findMissingLinks } from "@/lib/internal-links";
 import { getAppSettings, logRewriteResult, saveOriginalIfAbsent } from "@/lib/supabase";
-import type { PublishStatus } from "@/types";
+import type { InternalLinkFormat, InternalLinkRequest, PublishStatus } from "@/types";
 
 const SNIPPET_LENGTH = 300;
 
@@ -17,6 +18,17 @@ export interface RewriteResult {
   postId: number;
   updatedUrl: string;
   summary: string | null;
+  /** URLs of requested internal links that don't appear in the rewritten body (Gemini skipped them). */
+  missingLinkUrls: string[];
+}
+
+export interface PerformRewriteOptions {
+  instruction?: string;
+  /** Internal links Gemini is asked to weave into the body. */
+  internalLinks?: InternalLinkRequest[];
+  internalLinkFormat?: InternalLinkFormat;
+  /** Called with each raw text delta as Gemini streams the rewrite in. */
+  onDelta?: (text: string) => void;
 }
 
 /**
@@ -27,10 +39,10 @@ export interface RewriteResult {
 export async function performRewrite(
   postId: number,
   publishStatus: PublishStatus,
-  instruction?: string,
-  /** Called with each raw text delta as Gemini streams the rewrite in. */
-  onDelta?: (text: string) => void
+  options: PerformRewriteOptions = {}
 ): Promise<RewriteResult> {
+  const { instruction, internalLinks = [], internalLinkFormat, onDelta } = options;
+
   // Independent reads: fetch the post and the configured model in parallel.
   const [post, geminiModel] = await Promise.all([
     getPost(postId),
@@ -44,13 +56,13 @@ export async function performRewrite(
   await saveOriginalIfAbsent(postId, post.content, post.status);
 
   try {
-    const { content: rewrittenContent, summary } = await rewriteArticle(
-      post.title,
-      post.content,
+    const { content: rewrittenContent, summary } = await rewriteArticle(post.title, post.content, {
       instruction,
-      geminiModel,
-      onDelta
-    );
+      modelOverride: geminiModel,
+      internalLinks,
+      internalLinkFormat,
+      onDelta,
+    });
     const updated = await updatePost(postId, {
       content: rewrittenContent,
       status: publishStatus,
@@ -66,16 +78,10 @@ export async function performRewrite(
       summary,
     });
 
-    return { postId: updated.id, updatedUrl: updated.link, summary };
+    const missingLinkUrls = findMissingLinks(rewrittenContent, internalLinks).map((link) => link.url);
+    return { postId: updated.id, updatedUrl: updated.link, summary, missingLinkUrls };
   } catch (error) {
-    const message =
-      error instanceof GeminiRateLimitError
-        ? "Gemini APIのレート制限に達しました。しばらく待ってから再試行してください。"
-        : error instanceof GeminiAuthError
-          ? "Gemini APIキーが未設定または無効です。.env.localのGEMINI_API_KEYを確認してください。"
-          : error instanceof Error
-            ? error.message
-            : "不明なエラーが発生しました。";
+    const message = describeGeminiError(error);
 
     await logRewriteResult({
       post_id: post.id,

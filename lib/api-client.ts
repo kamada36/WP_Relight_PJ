@@ -1,5 +1,5 @@
 import { RESULT_MARKER, SUMMARY_DIVIDER, TTFB_GUARD_BYTE } from "@/lib/rewrite-stream";
-import type { PublishStatus } from "@/types";
+import type { InternalLinkFormat, InternalLinkRequest, PublishStatus } from "@/types";
 
 /**
  * Client-side fetch wrapper for the app's `{ success: boolean, ... }` JSON API.
@@ -47,6 +47,14 @@ export interface StreamRewriteResult {
   postId: number;
   updatedUrl: string;
   summary: string | null;
+  /** Requested internal links that Gemini left out of the rewritten body. */
+  missingLinkUrls: string[];
+}
+
+export interface StreamRewriteOptions {
+  instruction?: string;
+  internalLinks?: InternalLinkRequest[];
+  internalLinkFormat?: InternalLinkFormat;
 }
 
 /**
@@ -60,13 +68,13 @@ export interface StreamRewriteResult {
 export async function streamRewrite(
   postId: number,
   publishStatus: PublishStatus,
-  instruction: string | undefined,
+  options: StreamRewriteOptions,
   onBodyUpdate: (visibleBody: string) => void
 ): Promise<StreamRewriteResult> {
   const res = await fetch("/api/rewrite", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ postId, publishStatus, instruction }),
+    body: JSON.stringify({ postId, publishStatus, ...options }),
   });
 
   if (!res.ok || !res.body) {
@@ -124,5 +132,10 @@ export async function streamRewrite(
   if (!payload.ok) {
     throw new Error(payload.error);
   }
-  return { postId: payload.postId, updatedUrl: payload.updatedUrl, summary: payload.summary };
+  return {
+    postId: payload.postId,
+    updatedUrl: payload.updatedUrl,
+    summary: payload.summary,
+    missingLinkUrls: payload.missingLinkUrls ?? [],
+  };
 }

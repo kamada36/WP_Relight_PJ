@@ -1,5 +1,7 @@
 import { GoogleGenerativeAI, FinishReason } from "@google/generative-ai";
 import { SUMMARY_DIVIDER } from "@/lib/rewrite-stream";
+import { buildInternalLinkPromptSection } from "@/lib/internal-links";
+import type { InternalLinkFormat, InternalLinkRequest } from "@/types";
 
 export const DEFAULT_MODEL_NAME = "gemini-3.6-flash";
 
@@ -75,11 +77,14 @@ function buildPrompt(
   title: string,
   contentHtml: string,
   currentDate: string,
-  instruction?: string
+  instruction?: string,
+  internalLinks: InternalLinkRequest[] = [],
+  internalLinkFormat: InternalLinkFormat = "blogcard"
 ): string {
   const instructionSection = instruction?.trim()
     ? `\n# この記事固有の追加指示（最優先で反映すること）\n${instruction.trim()}\n`
     : "";
+  const internalLinkSection = buildInternalLinkPromptSection(internalLinks, internalLinkFormat);
 
   return `あなたはプロのWebライター兼SEOスペシャリストです。
 以下のHTML記事本文をリライトしてください。
@@ -89,7 +94,7 @@ ${title}
 
 # 記事本文（HTML）
 ${contentHtml}
-${instructionSection}
+${instructionSection}${internalLinkSection}
 # リライトのルール（必須）
 1. 文章の意味・事実関係は変更せず、HTML構造（見出しタグ<h2>, <h3>, リスト<ul>, <li>など）は保持したまま、自然な言い回し・表現の改善・読みやすさの向上を行うこと。
 2. 記事本文の最先端（先頭）に、以下のHTMLフォーマットで最終更新日を挿入すること。
@@ -98,6 +103,10 @@ ${instructionSection}
 4. 記事のタイトルや「以下がリライト結果です」等の余計な解説文は一切出力に含めないこと。
 5. HTML本文の出力が終わったら、必ず単独の行に "===SUMMARY===" とだけ書き、その次の行から今回のリライトでどのような変更を加えたかの概要を日本語1〜2文で書くこと。変更前後の具体的な文言の引用や詳細な差分は書かず、「専門用語をかみ砕いて説明を追加した」「見出しの言い回しを整理した」のようなざっくりとした説明にすること。${
     instruction?.trim() ? "\n6. 上記の「この記事固有の追加指示」がある場合は、ルール1〜4と矛盾しない範囲で必ず反映すること。" : ""
+  }${
+    internalLinks.length > 0
+      ? `\n${instruction?.trim() ? "7" : "6"}. 上記の「挿入する内部リンク」は必ず全件挿入すること。リンクの案内文や<p>タグの追加は、ルール1（HTML構造の保持）の例外として認める。`
+      : ""
   }`;
 }
 
@@ -117,20 +126,92 @@ export interface RewriteArticleResult {
   summary: string | null;
 }
 
+export interface RewriteArticleOptions {
+  instruction?: string;
+  modelOverride?: string;
+  /** Internal links Gemini must weave into the body (see lib/internal-links). */
+  internalLinks?: InternalLinkRequest[];
+  internalLinkFormat?: InternalLinkFormat;
+  /** Called with each raw text delta as it streams in from Gemini, before any post-processing. */
+  onDelta?: (text: string) => void;
+}
+
+/**
+ * Turns whatever the Gemini SDK threw into this module's typed errors (or a
+ * descriptive Error), so every caller reports rate limits / bad keys / bad
+ * model names the same way.
+ */
+function toGeminiError(error: unknown, modelName: string): Error {
+  if (error instanceof GeminiAuthError) return error;
+
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (message.includes("429") || /rate limit|quota/i.test(message)) {
+    return new GeminiRateLimitError();
+  }
+  if (message.includes("API key not valid") || message.includes("API_KEY_INVALID")) {
+    console.error(
+      "[gemini] Gemini API rejected GEMINI_API_KEY as invalid. Verify the key in .env.local is a real, active key (not the placeholder from .env.example)."
+    );
+    return new GeminiAuthError("Gemini API key is invalid. Check GEMINI_API_KEY in .env.local.");
+  }
+  if (message.includes("404") && /model/i.test(message)) {
+    console.error(
+      `[gemini] Model "${modelName}" was rejected by the API. Set GEMINI_MODEL_NAME in .env.local to a currently supported model.`
+    );
+    return new Error(
+      `Gemini API error: model "${modelName}" is not available. Set GEMINI_MODEL_NAME to a supported model.`
+    );
+  }
+  return new Error(`Gemini API error: ${message}`);
+}
+
+/**
+ * One-shot structured generation: asks Gemini for a JSON response and parses it.
+ * Used for article summaries and internal-link matching, where the answer is
+ * small and must be machine-readable (unlike the streamed HTML rewrite).
+ */
+export async function generateJson<T>(prompt: string, modelOverride?: string): Promise<T> {
+  const client = getClient();
+  const modelName = getModelName(modelOverride);
+  const model = client.getGenerativeModel({
+    model: modelName,
+    generationConfig: { responseMimeType: "application/json", temperature: 0.3 },
+  });
+
+  try {
+    const result = await model.generateContent(prompt);
+    const text = stripCodeFences(result.response.text());
+    if (!text) throw new Error("Gemini API returned an empty response");
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error("Gemini API returned malformed JSON");
+    }
+  } catch (error) {
+    throw toGeminiError(error, modelName);
+  }
+}
+
 export async function rewriteArticle(
   title: string,
   contentHtml: string,
-  instruction?: string,
-  modelOverride?: string,
-  /** Called with each raw text delta as it streams in from Gemini, before any post-processing. */
-  onDelta?: (text: string) => void
+  options: RewriteArticleOptions = {}
 ): Promise<RewriteArticleResult> {
+  const { instruction, modelOverride, internalLinks, internalLinkFormat, onDelta } = options;
   const client = getClient();
   const modelName = getModelName(modelOverride);
   const model = client.getGenerativeModel({ model: modelName });
 
   const startedAt = Date.now();
-  let prompt = buildPrompt(title, contentHtml, formatCurrentDate(), instruction);
+  let prompt = buildPrompt(
+    title,
+    contentHtml,
+    formatCurrentDate(),
+    instruction,
+    internalLinks,
+    internalLinkFormat
+  );
   let raw = "";
   let continuations = 0;
 
@@ -164,27 +245,17 @@ export async function rewriteArticle(
     }
     return splitContentAndSummary(stripCodeFences(raw));
   } catch (error) {
-    if (error instanceof GeminiAuthError) throw error;
-
-    const message = error instanceof Error ? error.message : String(error);
-
-    if (message.includes("429") || /rate limit|quota/i.test(message)) {
-      throw new GeminiRateLimitError();
-    }
-    if (message.includes("API key not valid") || message.includes("API_KEY_INVALID")) {
-      console.error(
-        "[gemini] Gemini API rejected GEMINI_API_KEY as invalid. Verify the key in .env.local is a real, active key (not the placeholder from .env.example)."
-      );
-      throw new GeminiAuthError("Gemini API key is invalid. Check GEMINI_API_KEY in .env.local.");
-    }
-    if (message.includes("404") && /model/i.test(message)) {
-      console.error(
-        `[gemini] Model "${modelName}" was rejected by the API. Set GEMINI_MODEL_NAME in .env.local to a currently supported model.`
-      );
-      throw new Error(
-        `Gemini API error: model "${modelName}" is not available. Set GEMINI_MODEL_NAME to a supported model.`
-      );
-    }
-    throw new Error(`Gemini API error: ${message}`);
+    throw toGeminiError(error, modelName);
   }
+}
+
+/** User-facing (Japanese) description of an error thrown by this module, for toasts / logs. */
+export function describeGeminiError(error: unknown): string {
+  if (error instanceof GeminiRateLimitError) {
+    return "Gemini APIのレート制限に達しました。しばらく待ってから再試行してください。";
+  }
+  if (error instanceof GeminiAuthError) {
+    return "Gemini APIキーが未設定または無効です。.env.localのGEMINI_API_KEYを確認してください。";
+  }
+  return error instanceof Error ? error.message : "不明なエラーが発生しました。";
 }
