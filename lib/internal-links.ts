@@ -17,11 +17,11 @@ export const INTERNAL_LINK_FORMAT_LABELS: Record<InternalLinkFormat, string> = {
  * Small label placed directly above each blog-card URL so the card doesn't just sit there
  * bare — a common "あわせて読みたい" callout. Fixed HTML (not left to Gemini to design) so
  * every inserted card looks the same regardless of theme, and inline-styled so it renders
- * without depending on the theme's CSS. Rounded only on top so it visually reads as a tab
- * sitting on the card below it.
+ * without depending on the theme's CSS. Warm cream/coffee-brown palette with a soft border
+ * and a light drop shadow, like a printed café menu tag, rather than a flat solid-color chip.
  */
 const BLOGCARD_LABEL_HTML =
-  '<p style="margin:0;display:inline-block;padding:5px 14px;font-size:13px;font-weight:700;line-height:1;letter-spacing:.02em;color:#ffffff;background:#2b6cb0;border-radius:4px 4px 0 0;">📖 あわせて読みたい</p>';
+  '<p style="margin:0 0 8px;display:inline-block;padding:6px 16px;font-size:13px;font-weight:600;letter-spacing:.05em;color:#5c3a21;background:#fbf3e7;border:1.5px solid #a97c50;border-radius:6px;box-shadow:0 1px 2px rgba(92,58,33,0.15);">☕ あわせて読みたい</p>';
 
 /**
  * Reduces a URL to a comparable key: lowercase host without "www.", no scheme,
