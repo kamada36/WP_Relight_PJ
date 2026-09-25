@@ -9,9 +9,19 @@ import type { InternalLinkFormat, InternalLinkRequest } from "@/types";
 export const MAX_INTERNAL_LINKS_PER_REWRITE = 5;
 
 export const INTERNAL_LINK_FORMAT_LABELS: Record<InternalLinkFormat, string> = {
-  blogcard: "ブログカード（URL単独行）",
+  blogcard: "ブログカード（「あわせて読みたい」ラベル付き）",
   text: "テキストリンク",
 };
+
+/**
+ * Small label placed directly above each blog-card URL so the card doesn't just sit there
+ * bare — a common "あわせて読みたい" callout. Fixed HTML (not left to Gemini to design) so
+ * every inserted card looks the same regardless of theme, and inline-styled so it renders
+ * without depending on the theme's CSS. Rounded only on top so it visually reads as a tab
+ * sitting on the card below it.
+ */
+const BLOGCARD_LABEL_HTML =
+  '<p style="margin:0;display:inline-block;padding:5px 14px;font-size:13px;font-weight:700;line-height:1;letter-spacing:.02em;color:#ffffff;background:#2b6cb0;border-radius:4px 4px 0 0;">📖 あわせて読みたい</p>';
 
 /**
  * Reduces a URL to a comparable key: lowercase host without "www.", no scheme,
@@ -80,10 +90,14 @@ function formatRules(format: InternalLinkFormat): string {
     return `- 各リンクは、案内文の一部として自然に組み込んだテキストリンク（<a href="URL">語句または記事タイトル</a>）で挿入する。
 - 例: <p>〇〇の詳しい手順は、<a href="URL">記事タイトル</a>で解説しています。</p>`;
   }
-  return `- 各リンクは「案内文の段落」＋「ブログカード用のURL」の2つで挿入する。案内文は文脈に合わせて自然に書く（例: 「〇〇の詳細については、こちらの記事で解説しています。」）。
-- ブログカードは、案内文の直後に、前後を空行で区切った「URLだけの独立した1行」として書く。<a>タグや<p>タグで囲まず、URLの前後に他の文字も置かない（WordPressがカード表示に変換するため）。
+  return `- 各リンクは「案内文の段落」→「目立たせるラベル」→「ブログカード用のURL」の順で3つ挿入する。案内文は文脈に合わせて自然に書く（例: 「〇〇の詳細については、こちらの記事で解説しています。」）。
+- ラベルは案内文の直後に、以下のHTMLを一字一句変えずにそのまま挿入する（文言・スタイル・タグを変更・省略しない）:
+  ${BLOGCARD_LABEL_HTML}
+- ブログカードは、ラベルの直後に、前後を空行で区切った「URLだけの独立した1行」として書く。<a>タグや<p>タグで囲まず、URLの前後に他の文字も置かない（WordPressがカード表示に変換するため）。
 - 例:
   <p>〇〇の詳細については、こちらの記事で解説しています。</p>
+
+  ${BLOGCARD_LABEL_HTML}
 
   https://example.com/sample-article/`;
 }
