@@ -14,14 +14,18 @@ export const INTERNAL_LINK_FORMAT_LABELS: Record<InternalLinkFormat, string> = {
 };
 
 /**
- * Small label placed directly above each blog-card URL so the card doesn't just sit there
- * bare — a common "あわせて読みたい" callout. Fixed HTML (not left to Gemini to design) so
- * every inserted card looks the same regardless of theme, and inline-styled so it renders
- * without depending on the theme's CSS. Warm cream/coffee-brown palette with a soft border
- * and a light drop shadow, like a printed café menu tag, rather than a flat solid-color chip.
+ * Frame the blog-card URL sits inside, with the "あわせて読みたい" callout built into the
+ * border itself (the classic <fieldset>/<legend> border-interrupt look) rather than floating
+ * above the card as a separate chip. This is deliberately background-color-agnostic: because
+ * the legend sits directly in the gap the browser cuts into the border, nothing needs to be
+ * painted behind the label text, so it reads correctly no matter what the surrounding page's
+ * actual background color is (which this app has no way to know). Fixed HTML (not left to
+ * Gemini to design) so every inserted card looks the same regardless of theme. Warm
+ * cream/coffee-brown palette to read as a café menu-style frame.
  */
-const BLOGCARD_LABEL_HTML =
-  '<p style="margin:0 0 8px;display:inline-block;padding:6px 16px;font-size:13px;font-weight:600;letter-spacing:.05em;color:#5c3a21;background:#fbf3e7;border:1.5px solid #a97c50;border-radius:6px;box-shadow:0 1px 2px rgba(92,58,33,0.15);">☕ あわせて読みたい</p>';
+const BLOGCARD_FRAME_OPEN_HTML =
+  '<fieldset style="margin:0 0 1.5em;padding:20px 20px 16px;border:1.5px solid #a97c50;border-radius:10px;background:#fdf5ea;"><legend style="margin-left:10px;padding:0 10px;font-size:14px;font-weight:600;letter-spacing:.05em;color:#5c3a21;">☕ あわせて読みたい</legend>';
+const BLOGCARD_FRAME_CLOSE_HTML = "</fieldset>";
 
 /**
  * Reduces a URL to a comparable key: lowercase host without "www.", no scheme,
@@ -90,16 +94,20 @@ function formatRules(format: InternalLinkFormat): string {
     return `- 各リンクは、案内文の一部として自然に組み込んだテキストリンク（<a href="URL">語句または記事タイトル</a>）で挿入する。
 - 例: <p>〇〇の詳しい手順は、<a href="URL">記事タイトル</a>で解説しています。</p>`;
   }
-  return `- 各リンクは「案内文の段落」→「目立たせるラベル」→「ブログカード用のURL」の順で3つ挿入する。案内文は文脈に合わせて自然に書く（例: 「〇〇の詳細については、こちらの記事で解説しています。」）。
-- ラベルは案内文の直後に、以下のHTMLを一字一句変えずにそのまま挿入する（文言・スタイル・タグを変更・省略しない）:
-  ${BLOGCARD_LABEL_HTML}
-- ブログカードは、ラベルの直後に、前後を空行で区切った「URLだけの独立した1行」として書く。<a>タグや<p>タグで囲まず、URLの前後に他の文字も置かない（WordPressがカード表示に変換するため）。
+  return `- 各リンクは「案内文の段落」→「URLを囲む枠」の順で挿入する。案内文は文脈に合わせて自然に書く（例: 「〇〇の詳細については、こちらの記事で解説しています。」）。
+- 案内文の直後に、以下の開始タグを一字一句変えずにそのまま挿入する（文言・スタイル・タグを変更・省略しない。左上に「あわせて読みたい」というラベルが枠線に一体化して表示される）:
+  ${BLOGCARD_FRAME_OPEN_HTML}
+- 開始タグの直後に空行を1行入れ、その次の行にURLだけを単独で書く（前後を空行で区切り、<a>タグや<p>タグで囲まない。他の文字も置かない。WordPressがこのURLをカード表示に変換するため）。
+- URLの直後に空行を1行入れ、以下の終了タグを一字一句変えずにそのまま挿入して枠を閉じる:
+  ${BLOGCARD_FRAME_CLOSE_HTML}
 - 例:
   <p>〇〇の詳細については、こちらの記事で解説しています。</p>
 
-  ${BLOGCARD_LABEL_HTML}
+  ${BLOGCARD_FRAME_OPEN_HTML}
 
-  https://example.com/sample-article/`;
+  https://example.com/sample-article/
+
+  ${BLOGCARD_FRAME_CLOSE_HTML}`;
 }
 
 /**
